@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SBGModSwitcher</AssemblyName>
+    <RootNamespace>ModSwitcher2</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>2.0.0</Version>
+    <Product>SBG Mod Switcher</Product>
+    <TieredPGO>true</TieredPGO>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The segments GC (clrgc.dll, part of .NET 8): a status check unpacks the 90 MB shore wad, and the default
+         regions GC kept ~470 MB after it (8c release test); this one gives it back at once (23 MB after the check) -->
+    <RuntimeHostConfigurationOption Include="System.GC.Name" Value="clrgc.dll" />
+  </ItemGroup>
+
+  <!-- A self-contained publish does not copy clrgc.dll (it is in the runtime pack, not in its file list), and the
+       runtime loads it from the exe's folder, never from inside a single-file bundle: add it beside the exe -->
+  <Target Name="PublishClrGcBesideExe" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(RuntimeIdentifier)' != '' And '$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <_ClrGc Include="@(ResolvedRuntimePack->'%(PackageDirectory)\runtimes\$(RuntimeIdentifier)\native\clrgc.dll')" />
+      <_ClrGcFound Include="@(_ClrGc)" Condition="Exists('%(FullPath)')" />
+      <ResolvedFileToPublish Include="@(_ClrGcFound)" RelativePath="clrgc.dll" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    </ItemGroup>
+    <Error Condition="'@(_ClrGcFound)' == ''" Text="clrgc.dll not found in the runtime pack (System.GC.Name needs it)" />
+  </Target>
+
+  <ItemGroup>
+    <!-- One source with the old Switcher: LZ4, wad size table, King voice scan -->
+    <Compile Include="..\switcher\GowrTools.cs" Link="GowrTools.cs" />
+  </ItemGroup>
+
+</Project>

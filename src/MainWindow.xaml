@@ -1,0 +1,420 @@
+<Window x:Class="ModSwitcher2.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SBG Mod Switcher" Width="1180" Height="760" MinWidth="960" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Bg}"
+        Foreground="{StaticResource Txt}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True">
+
+  <Window.Resources>
+    <!-- Placeholder for a tab that gets its content in a later phase: icon (Tag) + one line (Content) -->
+    <Style x:Key="Empty" TargetType="ContentControl">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ContentControl">
+            <Border Style="{StaticResource CardBox}" Padding="32" Margin="0">
+              <StackPanel HorizontalAlignment="Center">
+                <Border Style="{StaticResource IcoBox}" Width="64" Height="64" CornerRadius="16">
+                  <Path Style="{StaticResource Icon}" Data="{TemplateBinding Tag}">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="1.4" ScaleY="1.4"/></Path.LayoutTransform>
+                  </Path>
+                </Border>
+                <TextBlock Text="{TemplateBinding Content}" Foreground="{StaticResource Dim}"
+                           Margin="0,14,0,0" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Overview status tile -->
+    <Style x:Key="Stat" TargetType="Border" BasedOn="{StaticResource CardBox}">
+      <Setter Property="MinWidth" Value="200"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1B2733" Offset="0"/>
+            <GradientStop Color="#151B22" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid>
+    <!-- ========== Main area (starts right of the collapsed rail) ========== -->
+    <Grid x:Name="MainArea" Margin="64,0,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- Warning banner: only shown when something needs attention -->
+      <Border x:Name="Banner" Grid.Row="0" Visibility="Collapsed" Background="{StaticResource WarnBg}"
+              BorderBrush="#5A4214" BorderThickness="0,0,0,1" Padding="20,9">
+        <DockPanel>
+          <Path x:Name="BannerIcon" Style="{StaticResource Icon}" Data="{StaticResource IcWarn}"
+                Stroke="{StaticResource Warn}" Margin="0,0,10,0"/>
+          <Button x:Name="BannerAction" DockPanel.Dock="Right" Style="{StaticResource Btn}" Padding="12,5"
+                  Visibility="Collapsed" Click="BannerAction_Click"/>
+          <TextBlock x:Name="BannerText" Foreground="{StaticResource Warn}" VerticalAlignment="Center"/>
+        </DockPanel>
+      </Border>
+
+      <DockPanel Grid.Row="1" Margin="28,20,28,6">
+        <Border x:Name="SearchBox" DockPanel.Dock="Right" Visibility="Collapsed" Width="260" CornerRadius="18"
+                Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="12,0">
+          <DockPanel>
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcSearch}" Stroke="{StaticResource Dim}" Margin="0,0,6,0">
+              <Path.LayoutTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.LayoutTransform>
+            </Path>
+            <TextBox x:Name="SearchText" BorderThickness="0" Background="Transparent" Padding="2,8"
+                     TextChanged="Search_Changed" ToolTip="Filter the cards (Ctrl+F)"/>
+          </DockPanel>
+        </Border>
+        <TextBlock x:Name="PageTitle" Text="Overview" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      </DockPanel>
+
+      <!-- Background: without it the empty space between cards is not hit-testable and the wheel does nothing there
+           (UI walk 2026-10-17: 3 real notches beside a card moved 0 px) -->
+      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False" Background="Transparent">
+        <Grid Margin="28,6,12,28">
+
+          <!-- Overview -->
+          <StackPanel x:Name="ViewOverview">
+            <WrapPanel>
+              <Border Style="{StaticResource Stat}" ToolTip="Game folder">
+                <StackPanel Orientation="Horizontal">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path x:Name="FolderIcon" Style="{StaticResource Icon}" Data="{StaticResource IcFolder}"/>
+                  </Border>
+                  <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="FolderValue" Text="…" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="Game folder" Foreground="{StaticResource Dim}" FontSize="12"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Stat}" ToolTip="Mod loader (MIO): winmm.dll + mod\GOWR_MIO.ini">
+                <StackPanel Orientation="Horizontal">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path x:Name="LoaderIcon" Style="{StaticResource Icon}" Data="{StaticResource IcPlug}"/>
+                  </Border>
+                  <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="LoaderValue" Text="…" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="Mod loader" Foreground="{StaticResource Dim}" FontSize="12"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Stat}" ToolTip="Is God of War Ragnarök running?">
+                <StackPanel Orientation="Horizontal">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path x:Name="GameIcon" Style="{StaticResource Icon}" Data="{StaticResource IcPlay}"/>
+                  </Border>
+                  <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="GameValue" Text="…" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="Game" Foreground="{StaticResource Dim}" FontSize="12"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Stat}" ToolTip="Mod Switcher version">
+                <StackPanel Orientation="Horizontal">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path Style="{StaticResource Icon}" Data="{StaticResource IcFile}"/>
+                  </Border>
+                  <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="VersionValue" Text="v2" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="Version" Foreground="{StaticResource Dim}" FontSize="12"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </WrapPanel>
+            <DockPanel Margin="0,18,16,10">
+              <Button DockPanel.Dock="Right" Style="{StaticResource Btn}" Padding="10,6" Margin="8,0,0,0" Click="RestoreAll_Click"
+                      Foreground="{StaticResource Bad}" ToolTip="Put every mod back to vanilla">
+                <StackPanel Orientation="Horizontal">
+                  <Path Style="{StaticResource IconFg}" Data="{StaticResource IcRestart}" Margin="0,-4,6,-4">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+                  </Path>
+                  <TextBlock Text="Restore all"/>
+                </StackPanel>
+              </Button>
+              <Button DockPanel.Dock="Right" Style="{StaticResource Btn}" Padding="10,6" Click="Refresh_Click"
+                      ToolTip="Check the game files again">
+                <StackPanel Orientation="Horizontal">
+                  <Path Style="{StaticResource IconFg}" Data="{StaticResource IcRefresh}" Margin="0,-4,6,-4">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+                  </Path>
+                  <TextBlock Text="Refresh"/>
+                </StackPanel>
+              </Button>
+              <TextBlock x:Name="ActiveHeader" Text="Active mods" FontSize="12" Foreground="{StaticResource Dim}"
+                         Typography.Capitals="AllSmallCaps" VerticalAlignment="Center"/>
+            </DockPanel>
+            <WrapPanel x:Name="ActiveChips"/>
+            <ContentControl x:Name="ActiveEmpty" Style="{StaticResource Empty}" Tag="{StaticResource IcCheck}"
+                            Content="Checking your game files…" HorizontalAlignment="Left" MinWidth="420"/>
+            <StackPanel x:Name="CommunityRow" Visibility="Collapsed">
+              <TextBlock Text="Community" FontSize="12" Foreground="{StaticResource Dim}" Margin="0,18,0,10"
+                         Typography.Capitals="AllSmallCaps"/>
+              <StackPanel Orientation="Horizontal">
+                <Button x:Name="DiscordButton" Style="{StaticResource Btn}" Padding="10,6" Visibility="Collapsed"
+                        Click="Community_Click" ToolTip="Help, bug reports and votes on the next mod">
+                  <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource IconFg}" Data="{StaticResource IcUsers}" Margin="0,-4,6,-4">
+                      <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+                    </Path>
+                    <TextBlock Text="Discord"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="NexusButton" Style="{StaticResource Btn}" Padding="10,6" Margin="8,0,0,0" Visibility="Collapsed"
+                        Click="Community_Click" ToolTip="Updates and new versions">
+                  <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource IconFg}" Data="{StaticResource IcHome}" Margin="0,-4,6,-4">
+                      <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+                    </Path>
+                    <TextBlock Text="Nexus page"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+
+          <WrapPanel x:Name="ViewBoss" Visibility="Collapsed"/>
+          <WrapPanel x:Name="ViewCompanions" Visibility="Collapsed"/>
+          <WrapPanel x:Name="ViewValhalla" Visibility="Collapsed"/>
+          <WrapPanel x:Name="ViewTweaks" Visibility="Collapsed"/>
+
+          <!-- Settings -->
+          <WrapPanel x:Name="ViewSettings" Visibility="Collapsed">
+            <Border Style="{StaticResource CardBox}" Width="460">
+              <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path Style="{StaticResource Icon}" Data="{StaticResource IcFolder}"/>
+                  </Border>
+                  <TextBlock Text="Game folder" FontSize="15" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBox x:Name="PathBox" IsReadOnly="True"/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <Button Style="{StaticResource Btn}" Click="Browse_Click" ToolTip="Pick the folder that holds GoWR.exe">
+                    <StackPanel Orientation="Horizontal">
+                      <Path Style="{StaticResource IconFg}" Data="{StaticResource IcFolder}" Margin="0,-3,8,-3"/>
+                      <TextBlock Text="Browse"/>
+                    </StackPanel>
+                  </Button>
+                  <Button Style="{StaticResource Btn}" Click="Detect_Click" Margin="8,0,0,0" ToolTip="Search the Steam libraries again">
+                    <StackPanel Orientation="Horizontal">
+                      <Path Style="{StaticResource IconFg}" Data="{StaticResource IcSearch}" Margin="0,-3,8,-3"/>
+                      <TextBlock Text="Detect"/>
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CardBox}" Width="460">
+              <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                  <Border Style="{StaticResource IcoBox}">
+                    <Path Style="{StaticResource Icon}" Data="{StaticResource IcInfo}" Stroke="{StaticResource Warn}"/>
+                  </Border>
+                  <TextBlock Text="About" FontSize="15" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Dim}"
+                           Text="Unofficial fan tool. Not affiliated with Santa Monica Studio or Sony Interactive Entertainment. Use at your own risk."/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <Button Style="{StaticResource Btn}" Content="Disclaimer" Click="ShowDisclaimer_Click"/>
+                  <Button Style="{StaticResource Btn}" Content="Copy bug report" Margin="8,0,0,0" Click="CopyBugReport_Click"
+                          ToolTip="Version, game folder, active mods and the last 50 activity lines, ready to paste"/>
+                  <Button Style="{StaticResource Btn}" Content="Settings folder" Margin="8,0,0,0" Click="OpenSettingsDir_Click"
+                          ToolTip="Where this app keeps its settings"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </WrapPanel>
+
+        </Grid>
+      </ScrollViewer>
+
+      <!-- Apply bar: shown on every tab while there are edits; nothing is written before Apply -->
+      <Border x:Name="ApplyBar" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+              Margin="0,0,0,18" Padding="18,10,10,10" CornerRadius="16" Background="{StaticResource Panel}"
+              BorderBrush="{StaticResource Warn}" BorderThickness="1" Panel.ZIndex="5">
+        <Border.Effect><DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.6" Color="Black"/></Border.Effect>
+        <StackPanel Orientation="Horizontal">
+          <Ellipse Width="9" Height="9" Fill="{StaticResource Warn}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+          <TextBlock x:Name="ApplyBarText" VerticalAlignment="Center" Margin="0,0,18,0"/>
+          <Button Style="{StaticResource Btn}" Padding="12,7" Click="DiscardAll_Click" ToolTip="Undo every edit (nothing was written yet)">
+            <StackPanel Orientation="Horizontal">
+              <Path Style="{StaticResource IconFg}" Data="{StaticResource IcUndo}" Margin="0,-4,6,-4">
+                <Path.LayoutTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.LayoutTransform>
+              </Path>
+              <TextBlock Text="Discard"/>
+            </StackPanel>
+          </Button>
+          <Button Style="{StaticResource BtnPri}" Padding="14,7" Margin="8,0,0,0" Click="ReviewApply_Click"
+                  ToolTip="Review the list, then apply (Ctrl+S)">
+            <StackPanel Orientation="Horizontal">
+              <Path Style="{StaticResource IconFg}" Data="{StaticResource IcCheck}" Margin="0,-4,6,-4">
+                <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+              </Path>
+              <TextBlock Text="Apply changes"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+
+      <!-- Activity: last action on one line; click to open the full list -->
+      <Border Grid.Row="3" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+        <StackPanel>
+          <Border x:Name="ActivityList" Visibility="Collapsed" Height="170" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Style="{StaticResource Btn}" Content="Copy log" Padding="10,5" Margin="8"
+                      VerticalAlignment="Top" Click="CopyLog_Click" ToolTip="Copy the activity log (for a bug report)"/>
+              <ScrollViewer x:Name="ActivityScroll" VerticalScrollBarVisibility="Auto" Padding="20,8,0,8" Background="Transparent">
+                <!-- the hint shows until the first line: Log() replaces the whole text -->
+                <TextBlock x:Name="ActivityText" Foreground="{StaticResource Dim}" FontFamily="Consolas" FontSize="12"
+                           Text="Nothing yet in this session. Applied changes, checks and errors show up here; Copy log copies the full log file."/>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+          <Button Style="{StaticResource Bare}" Click="ActivityToggle_Click" ToolTip="Show / hide the activity log">
+            <DockPanel Margin="20,8" Background="Transparent">
+              <TextBlock x:Name="ActivityArrow" DockPanel.Dock="Right" Text="Activity ▴" Foreground="{StaticResource Dim}"/>
+              <Ellipse x:Name="ActivityDot" Width="8" Height="8" Fill="{StaticResource Dim}" Margin="0,0,10,0"/>
+              <TextBlock x:Name="ActivityLast" Text="Ready" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- ========== Left rail: 64 px, opens to 210 px on hover or keyboard focus ========== -->
+    <Border x:Name="Rail" Width="64" HorizontalAlignment="Left" Background="{StaticResource Panel}"
+            BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" ClipToBounds="True" Panel.ZIndex="10"
+            MouseEnter="Rail_Open" MouseLeave="Rail_Close" IsKeyboardFocusWithinChanged="Rail_FocusChanged">
+      <Border.Effect>
+        <DropShadowEffect x:Name="RailShadow" BlurRadius="30" ShadowDepth="0" Opacity="0" Color="Black"/>
+      </Border.Effect>
+      <DockPanel Margin="8,12,8,12">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,6,0,20">
+          <Path Style="{StaticResource Icon}" Data="{StaticResource IcAxe}"/>
+          <TextBlock x:Name="RailTitle" Text="Mod Switcher" Foreground="{StaticResource Acc}" FontWeight="Bold" Margin="26,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom">
+          <Border Height="46" ToolTip="Game status" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+              <Ellipse x:Name="GameDot" Width="9" Height="9" Fill="{StaticResource Dim}"/>
+              <TextBlock x:Name="GameDotText" Text="Checking" Foreground="{StaticResource Dim}" Margin="34,0,0,0"/>
+            </StackPanel>
+          </Border>
+          <RadioButton x:Name="TabSettings" Style="{StaticResource RailTab}" Tag="Settings" Checked="Tab_Checked" ToolTip="Settings">
+            <StackPanel Orientation="Horizontal">
+              <Path Style="{StaticResource IconFg}" Data="{StaticResource IcGear}"/>
+              <TextBlock Text="Settings" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+        </StackPanel>
+
+        <StackPanel>
+          <RadioButton x:Name="TabOverview" Style="{StaticResource RailTab}" Tag="Overview" IsChecked="True" Checked="Tab_Checked" ToolTip="Overview (Ctrl+1)">
+            <StackPanel Orientation="Horizontal">
+              <Path Style="{StaticResource IconFg}" Data="{StaticResource IcHome}"/>
+              <TextBlock Text="Overview" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="TabBoss" Style="{StaticResource RailTab}" Tag="Boss Fights" Checked="Tab_Checked" ToolTip="Boss Fights (Ctrl+2)">
+            <StackPanel Orientation="Horizontal">
+              <Grid><Path Style="{StaticResource IconFg}" Data="{StaticResource IcSword}"/><Ellipse x:Name="DotBoss" Width="9" Height="9" Fill="{StaticResource Warn}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-3,0" Visibility="Collapsed" ToolTip="Edited, not applied yet"/></Grid>
+              <TextBlock Text="Boss Fights" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="TabCompanions" Style="{StaticResource RailTab}" Tag="Companions" Checked="Tab_Checked" ToolTip="Companions (Ctrl+3)">
+            <StackPanel Orientation="Horizontal">
+              <Grid><Path Style="{StaticResource IconFg}" Data="{StaticResource IcUsers}"/><Ellipse x:Name="DotCompanions" Width="9" Height="9" Fill="{StaticResource Warn}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-3,0" Visibility="Collapsed" ToolTip="Edited, not applied yet"/></Grid>
+              <TextBlock Text="Companions" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="TabValhalla" Style="{StaticResource RailTab}" Tag="Valhalla" Checked="Tab_Checked" ToolTip="Valhalla (Ctrl+4)">
+            <StackPanel Orientation="Horizontal">
+              <Grid><Path Style="{StaticResource IconFg}" Data="{StaticResource IcShield}"/><Ellipse x:Name="DotValhalla" Width="9" Height="9" Fill="{StaticResource Warn}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-3,0" Visibility="Collapsed" ToolTip="Edited, not applied yet"/></Grid>
+              <TextBlock Text="Valhalla" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="TabTweaks" Style="{StaticResource RailTab}" Tag="Game Tweaks" Checked="Tab_Checked" ToolTip="Game Tweaks (Ctrl+5)">
+            <StackPanel Orientation="Horizontal">
+              <Grid><Path Style="{StaticResource IconFg}" Data="{StaticResource IcSliders}"/><Ellipse x:Name="DotTweaks" Width="9" Height="9" Fill="{StaticResource Warn}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-3,0" Visibility="Collapsed" ToolTip="Edited, not applied yet"/></Grid>
+              <TextBlock Text="Game Tweaks" Margin="26,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ========== Toast: result of the last action, fades out ========== -->
+    <Border x:Name="Toast" Visibility="Collapsed" Panel.ZIndex="40" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            Margin="0,0,22,56" CornerRadius="12" Padding="16,11" BorderThickness="1" MaxWidth="520" IsHitTestVisible="False">
+      <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5" Color="Black"/></Border.Effect>
+      <StackPanel Orientation="Horizontal">
+        <Path x:Name="ToastIcon" Style="{StaticResource Icon}" Data="{StaticResource IcCheck}" Margin="0,0,10,0"/>
+        <TextBlock x:Name="ToastText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="460"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ========== Review box: the edits that Apply will write, one row each, with a delete button ========== -->
+    <Grid x:Name="Confirm" Visibility="Collapsed" Background="#C0000000" Panel.ZIndex="45">
+      <Border Width="600" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+              CornerRadius="18" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel>
+          <Border Style="{StaticResource IcoBox}" Width="58" Height="58" CornerRadius="14" Background="{StaticResource OkBg}">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcCheck}" Stroke="{StaticResource Ok}"/>
+          </Border>
+          <TextBlock x:Name="ConfirmTitle" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,12"/>
+          <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto" Background="Transparent">
+            <StackPanel x:Name="ConfirmRows"/>
+          </ScrollViewer>
+          <TextBlock x:Name="ConfirmNote" Foreground="{StaticResource Dim}" FontSize="12" TextWrapping="Wrap"
+                     HorizontalAlignment="Center" Margin="0,10,0,0"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+            <Button x:Name="ConfirmNo" Style="{StaticResource Btn}" Content="Cancel" Padding="18,9" IsCancel="True" Click="ConfirmNo_Click"/>
+            <Button x:Name="ConfirmYes" Style="{StaticResource BtnPri}" Padding="18,9" Margin="10,0,0,0" Click="ConfirmYes_Click"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- ========== First-run disclaimer (over everything) ========== -->
+    <Grid x:Name="Disclaimer" Visibility="Collapsed" Background="#C0000000" Panel.ZIndex="50">
+      <Border Width="470" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+              CornerRadius="18" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel>
+          <Border Style="{StaticResource IcoBox}" Width="58" Height="58" CornerRadius="14" Background="#3A3019">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcWarn}" Stroke="{StaticResource Warn}"/>
+          </Border>
+          <TextBlock Text="Before you start" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,14"/>
+          <StackPanel Orientation="Horizontal" Margin="0,5">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcInfo}"/>
+            <TextBlock Text="Unofficial fan tool. Use at your own risk." Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Dim}"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,5">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcShield}"/>
+            <TextBlock Text="Back up your saves first." Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Dim}"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,5">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcFile}"/>
+            <TextBlock Text="Changes only your own game files; ships none." Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Dim}"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,5">
+            <Path Style="{StaticResource Icon}" Data="{StaticResource IcRestart}"/>
+            <TextBlock Text="Turn mods off before reporting game bugs." Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Dim}"/>
+          </StackPanel>
+          <CheckBox x:Name="AgreeBox" Content="I understand" HorizontalAlignment="Center" Margin="0,18,0,14"/>
+          <Button x:Name="AgreeButton" Style="{StaticResource BtnPri}" Content="Continue" HorizontalAlignment="Center"
+                  Padding="22,10" IsEnabled="{Binding IsChecked, ElementName=AgreeBox}" Click="Agree_Click"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>
