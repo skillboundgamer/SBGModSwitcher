@@ -30,6 +30,29 @@ The result is `out/SBGModSwitcher.exe` plus `out/clrgc.dll`. These are the same 
 
 The experimental Lab (`src/Lab.cs`, `src/LabView.cs`) is a stub here. Releases never show it.
 
+## Download
+
+- [Nexus Mods](https://www.nexusmods.com/godofwarragnarok/mods/292): the release zip.
+- [GitHub Releases](https://github.com/Noumannomi123/SBGModSwitcher/releases): the same files.
+
+Signed releases are built by this repo's GitHub Actions workflow (`.github/workflows/build.yml`) from the code here
+and signed through SignPath. See the code signing policy below.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+Team roles:
+- Committers and reviewers: [Noumannomi123](https://github.com/Noumannomi123)
+- Approvers: [Noumannomi123](https://github.com/Noumannomi123)
+
+Only files built by this repo's GitHub Actions workflow from this repo's source code are signed.
+
+Privacy policy: this program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it. The app itself makes no network connections. It only
+opens a web link in your browser when you click a link button.
+
 ## Licence
 
 MIT, see `LICENSE.txt`. Credits: `CREDITS.md`.
