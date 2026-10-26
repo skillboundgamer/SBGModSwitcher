@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SBG Mod Switcher" Width="1180" Height="760" MinWidth="960" MinHeight="640"
         WindowStartupLocation="CenterScreen" Background="{StaticResource Bg}"
-        Foreground="{StaticResource Txt}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True">
+        Foreground="{StaticResource Txt}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True"
+        AllowDrop="True" DragEnter="Pack_DragEnter" DragOver="Pack_DragOver" DragLeave="Pack_DragLeave" Drop="Pack_Drop">
 
   <Window.Resources>
     <!-- Placeholder for a tab that gets its content in a later phase: icon (Tag) + one line (Content) -->
@@ -155,6 +156,8 @@
             <WrapPanel x:Name="ActiveChips"/>
             <ContentControl x:Name="ActiveEmpty" Style="{StaticResource Empty}" Tag="{StaticResource IcCheck}"
                             Content="Checking your game files…" HorizontalAlignment="Left" MinWidth="420"/>
+            <!-- mod packs: built in PacksView.cs (installed packs + the install drop zone) -->
+            <StackPanel x:Name="PacksSection"/>
             <StackPanel x:Name="CommunityRow" Visibility="Collapsed">
               <TextBlock Text="Community" FontSize="12" Foreground="{StaticResource Dim}" Margin="0,18,0,10"
                          Typography.Capitals="AllSmallCaps"/>
@@ -225,6 +228,8 @@
                            Text="Unofficial fan tool. Not affiliated with Santa Monica Studio or Sony Interactive Entertainment. Use at your own risk."/>
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                   <Button Style="{StaticResource Btn}" Content="Disclaimer" Click="ShowDisclaimer_Click"/>
+                  <Button x:Name="GuideButton" Style="{StaticResource Btn}" Content="Guide" Margin="8,0,0,0" Click="ShowGuide_Click"
+                          ToolTip="The first-start guide: game folder, mod loader, first mod"/>
                   <Button Style="{StaticResource Btn}" Content="Copy bug report" Margin="8,0,0,0" Click="CopyBugReport_Click"
                           ToolTip="Version, game folder, active mods and the last 50 activity lines, ready to paste"/>
                   <Button Style="{StaticResource Btn}" Content="Settings folder" Margin="8,0,0,0" Click="OpenSettingsDir_Click"
@@ -384,6 +389,11 @@
         </StackPanel>
       </Border>
     </Grid>
+
+    <!-- ========== Mod pack install / remove overlay and the drag-over glow (PacksView.cs) ========== -->
+    <Grid x:Name="GuideOverlay" Visibility="Collapsed" Background="#D00D1014" Panel.ZIndex="45"/>
+    <Grid x:Name="PackOverlay" Visibility="Collapsed" Background="#C0000000" Panel.ZIndex="46"/>
+    <Grid x:Name="DropGlow" Visibility="Collapsed" Panel.ZIndex="47" IsHitTestVisible="False"/>
 
     <!-- ========== First-run disclaimer (over everything) ========== -->
     <Grid x:Name="Disclaimer" Visibility="Collapsed" Background="#C0000000" Panel.ZIndex="50">

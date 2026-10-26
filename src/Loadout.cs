@@ -30,7 +30,7 @@ public sealed record LoadoutCode(string App, string? Game, bool AppExists, bool 
 /// </summary>
 public static class Loadout
 {
-    public const string CodeSrc = @"versions\loadout_v05.lua";
+    public const string CodeSrc = @"versions\loadout_v06.lua";
     public const string CodeGame = @"mod\sbg_loadout.lua";
     public const string CfgGame = @"mod\sbg_loadout_cfg.lua";
     public const string LiveGame = @"mod\live.lua";
@@ -48,7 +48,7 @@ public static class Loadout
     };
 
     /// <summary>Glyph kinds (the tsv's kind column) in the old app's order. "Stat" glyphs go in their own list.</summary>
-    public static readonly string[] GlyphKinds = { "Perk", "Axe", "Blades", "Spear", "Stat" };
+    public static readonly string[] GlyphKinds = { "Perk", "Axe", "Blades", "Spear", "Stat", "Technique" };
 
     /// <summary>Items from the dev copy in the data root (switcher\valhalla_items.tsv).</summary>
     public static List<LoadoutItem> Items(string dataRoot) => ItemsFrom(Path.Combine(dataRoot, ItemsSrc));

@@ -12,6 +12,8 @@ public sealed class AppSettings
     public string? GamePath { get; set; }
     /// <summary>Version of the disclaimer text the player accepted (0 = never).</summary>
     public int DisclaimerAccepted { get; set; }
+    /// <summary>The first-start guide of pack mode was finished or skipped (GuideView.cs).</summary>
+    public bool GuideDone { get; set; }
     /// <summary>Show the Lab (experimental tools) at the bottom of Boss Fights.</summary>
     public bool ShowExperimental { get; set; }
     /// <summary>Language of the loadout item list (the game's r_lang_*.wad code), English by default.</summary>

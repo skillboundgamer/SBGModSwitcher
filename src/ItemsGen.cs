@@ -17,6 +17,9 @@ public static class ItemsGen
     public const string DumpScript = @"mod\dump\int9\gameart\visualscripts\valhalla\resources\r_perm\progression\progressionmanagervalhalla.visualscript";
     public const string PermDcb = @"exec\dc\pc_le\wad_r_perm.dcb";
     public static string LangWad(string code) => $@"exec\wad\pc_le\r_lang_{code}.wad";
+    /// <summary>Bump when Classify / the row rules change: it is part of the built list's file name (ItemsPath), so an
+    /// app with new rules never reuses a list built by an older app (2 = the "+" technique glyphs, 2026-10-25).</summary>
+    public const int RulesVersion = 2;
     public const string Header = "# internal name\tkind\tlabel\tdescription   (made by tools/valitems.py; do not edit by hand)";
 
     /// <summary>Language codes the game has on this PC (r_lang_*.wad), English first.</summary>
@@ -64,7 +67,7 @@ public static class ItemsGen
         // no game name found at all = the record layout moved (a game update): fail instead of caching internal names
         if (rows.Count > 0 && named == 0)
             throw new InvalidDataException("no item names found in wad_r_perm.dcb: this game version is newer than the app");
-        string[] order = { "Perk", "Axe", "Blades", "Spear", "Stat" };
+        string[] order = { "Perk", "Axe", "Blades", "Spear", "Stat", "Technique" };
         var sorted = rows.OrderBy(r => Array.IndexOf(order, r.Kind) is var i && i >= 0 ? i : 9)
                          .ThenBy(r => r.Kind, StringComparer.Ordinal)
                          .ThenBy(r => PyLower(r.Label), StringComparer.Ordinal);
@@ -98,8 +101,10 @@ public static class ItemsGen
 
     public static (string Kind, string Label)? Classify(string name)
     {
-        if (Skip.Contains(name) || name.StartsWith("Glyph_Refill") || name.StartsWith("Glyph_ValKeyWeaponThisRun") || name.StartsWith("Glyph_STN_"))
+        if (Skip.Contains(name) || name.StartsWith("Glyph_Refill") || name.StartsWith("Glyph_ValKeyWeaponThisRun"))
             return null;
+        var st = Regex.Match(name, @"^Glyph_STN_(.+)_Group_Mod$");
+        if (st.Success) return ("Technique", Words(st.Groups[1].Value));
         var m = Regex.Match(name, @"^Glyph_AttributeStats_(.+)_(\d)$");
         if (m.Success)
         {

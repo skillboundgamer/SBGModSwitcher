@@ -17,6 +17,8 @@ public partial class App : Application
         base.OnStartup(e);
         var a = e.Args;
         if (a.Length > 2 && a[0] == "--perf") { StartPerf(a[1], a[2]); return; }   // hidden timing mode (Perf.cs)
+        if (a.Length > 2 && a[0] == "--guide-demo") { StartGuideDemo(a[1], a[2]); return; }   // hidden guide screenshots (GuideDemo.cs)
+        if (a.Length > 3 && a[0] == "--pack-demo") { StartPackDemo(a[1], a[2], a[3]); return; }   // hidden demo mode (PacksDemo.cs)
         if (a.Length > 0 && a[0].StartsWith("--"))
         {
             int code;
@@ -166,6 +168,17 @@ public partial class App : Application
                 o.WriteLine(res.NoChange ? "no change" : res.FullRestart ? "restart: full" : "restart: menu");
                 return 0;
             }
+            case "--dumpfill":
+            {
+                // --dumpfill --game D [--out D] [--only WAD] : fill missing MIO dumps from D's own wads (DumpFill.cs; tests).
+                // One "dump<TAB>status<TAB>sha|-<TAB>ms<TAB>why" line per target, then "peak<TAB>working set<TAB>private bytes".
+                var g = Opt("--game") ?? throw new ArgumentException("--dumpfill needs --game <folder>");
+                foreach (var f in DumpFill.FillMissing(g, Opt("--out"), Opt("--only")))
+                    o.WriteLine($"{f.Target.DumpRel}\t{f.Status}\t{f.Sha ?? "-"}\t{f.Ms}\t{f.Why}");
+                using var me = System.Diagnostics.Process.GetCurrentProcess();
+                o.WriteLine($"peak\t{me.PeakWorkingSet64}\t{me.PeakPagedMemorySize64}");
+                return 0;
+            }
             case "--items-build":
             {
                 // --items-build --game D [--lang en] --out FILE : the loadout item list from the player's own files (8b)
@@ -190,6 +203,17 @@ public partial class App : Application
                         var d = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
                         foreach (var line in Loader.Install(g, d)) o.WriteLine(line);
                         return 0;
+                    case "fix":
+                        o.WriteLine(Loader.IniFix(g));
+                        return 0;
+                    case "restore":
+                        o.WriteLine(Loader.IniRestore(g) ?? "no backup");
+                        return 0;
+                    case "setup":   // --loader setup --game D --data D [--door true|false] [--exe-version X] : the Setup card rows
+                        bool? door = Opt("--door") is { } dv ? dv == "true" : null;
+                        foreach (var sr in SetupCheck.Run(g, Opt("--data"), door, Opt("--exe-version")))
+                            o.WriteLine($"{sr.Key}	{(sr.Ok == true ? "ok" : sr.Ok == false ? "no" : "unknown")}	{sr.Fix}	{sr.Next}");
+                        return 0;
                     case "remove":
                         foreach (var line in Loader.Remove(g)) o.WriteLine(line);
                         return 0;
@@ -209,6 +233,56 @@ public partial class App : Application
                 o.WriteLine($"tabs\t{string.Join(",", ed.Tabs)}");
                 o.WriteLine($"loadout\t{(ed.Loadout ? "true" : "false")}");
                 o.WriteLine($"comingSoon\t{ed.ComingSoon.Count}");
+                return 0;
+            }
+            case "--pack-check":
+            case "--pack-install":
+            {
+                // --pack-check ZIP [--app-version X] : "file<TAB>mod<TAB>game path" lines (the preview), "ok<TAB>id<TAB>version" or the error on stderr, exit 1 (PackManifest.cs; tests only)
+                // --pack-install ZIP --appdata D : PackInstaller into D\packs\<id> (no game files touched; tests; env SBG_PACK_CRASH)
+                var app = Opt("--app-version") is { } av ? Version.Parse(av) : PackManifest.AppVersion;
+                var man = PackManifest.FromZip(a[1], app);
+                var info = man.Info;
+                foreach (var f in man.GameFiles) o.WriteLine($"file\t{f.Mod}\t{f.Path}");   // the preview list
+                if (a[0] == "--pack-install")
+                {
+                    if (Opt("--appdata") == null) throw new ArgumentException("--pack-install needs --appdata <folder>");
+                    // the same installer as the window: other packs' groups are refused; with --game G [--recycle R] the
+                    // old version's mods are turned off first, as in the window (PackCli.cs); context-free thread
+                    var inst = new PackInstaller { Taken = PackCli.Taken() };
+                    // the old version is looked up before the install: Packs.List cleans hidden folders (also the new one's)
+                    var old = Packs.List().FirstOrDefault(x => x.Info.Id == info.Id);
+                    if (Opt("--game") is { } ig && old != null)
+                        inst.TurnOldOff = _ => Task.FromResult(PackCli.TurnOff(old, ig, Opt("--recycle") ?? ModApplier.DefaultRecycle, o));
+                    var done = Task.Run(() => inst.InstallAsync(a[1], app)).GetAwaiter().GetResult();
+                    o.WriteLine("installed\t" + done!.Root);
+                }
+                o.WriteLine($"ok\t{info.Id}\t{info.Version}");
+                return 0;
+            }
+            case "--pack-remove":
+            {
+                // --pack-remove ID --appdata D --game G [--recycle R] [--force] : its mods off, then the pack deleted (as the
+                // window's Remove; --force = "Remove anyway"). Exit 1 and the pack kept when a mod could not be turned off.
+                if (Opt("--appdata") == null || Opt("--game") is not { } rg) throw new ArgumentException("--pack-remove needs --appdata <folder> --game <folder>");
+                if (!GameLocator.IsGameDir(rg)) throw new PackError("Set the game folder first: its mods must be turned off before it can go.");
+                if (!PackManifest.IdRx.IsMatch(a[1])) throw new PackError("Bad pack id: " + a[1]);
+                var pack = Packs.List().FirstOrDefault(x => x.Info.Id == a[1]) ?? throw new PackError("not installed: " + a[1]);
+                if (!PackCli.TurnOff(pack, rg, Opt("--recycle") ?? ModApplier.DefaultRecycle, o) && Array.IndexOf(a, "--force") < 0)
+                {
+                    Console.Error.WriteLine("kept: a mod could not be turned off");
+                    return 1;
+                }
+                Packs.Delete(a[1]);
+                o.WriteLine("removed\t" + a[1]);
+                return 0;
+            }
+            case "--pack-list":
+            {
+                // --pack-list --appdata D : "pack<TAB>id<TAB>version<TAB>groups" per installed pack, "error<TAB>..." per broken one
+                var errs = new List<string>();
+                foreach (var p in Packs.List(errs)) o.WriteLine($"pack\t{p.Info.Id}\t{p.Info.Version}\t{string.Join(",", p.Info.Groups)}");
+                foreach (var er in errs) o.WriteLine("error\t" + er);
                 return 0;
             }
             case "--rules":

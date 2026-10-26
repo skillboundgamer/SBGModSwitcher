@@ -24,7 +24,7 @@ public partial class MainWindow
 
     ModCatalog? _catalog;
     string? _dataRoot;
-    ModMatcher? _matcher;
+    readonly Dictionary<string, ModMatcher> _matchers = new(StringComparer.OrdinalIgnoreCase);
     string? _matcherGame;
     readonly Dictionary<string, Card> _cards = new();
     readonly Dictionary<string, int> _active = new();
@@ -36,10 +36,22 @@ public partial class MainWindow
 
     void BuildModCards()
     {
-        _dataRoot = DataRoot.Find();
-        if (_dataRoot == null) { ActiveEmpty.Content = "Mod list (mods.json) not found"; return; }
-        try { _catalog = ModCatalog.Load(DataRoot.CatalogPath(_dataRoot), _edition); }
-        catch (Exception ex) { ActiveEmpty.Content = "Mod list could not be read: " + ex.Message; return; }
+        if (_packMode)
+        {
+            // packs only (the release app): each pack is its own data root; the loadout uses the first pack that has it
+            _catalog = new ModCatalog();
+            foreach (var p in _packs) AddPackGroups(p);
+            _dataRoot = _packs.FirstOrDefault(p => p.Info.Loadout)?.Root;
+            BuildPacksSection();
+        }
+        else
+        {
+            _dataRoot = DataRoot.Find();
+            if (_dataRoot == null) { ActiveEmpty.Content = "Mod list (mods.json) not found"; return; }
+            try { _catalog = ModCatalog.Load(DataRoot.CatalogPath(_dataRoot), _edition); }
+            catch (Exception ex) { ActiveEmpty.Content = "Mod list could not be read: " + ex.Message; return; }
+            foreach (var g in _catalog.Groups) g.Root = _dataRoot;
+        }
 
         foreach (var g in _catalog.Groups)
         {
@@ -50,11 +62,7 @@ public partial class MainWindow
         if (_edition != null)   // an edition has no tweaks or Lab; the loadout and its item list only with "loadout": true
         {
             foreach (var cs in _edition.ComingSoon) TabPanel(cs.Tab).Children.Add(MakeComingSoonCard(cs));
-            if (_edition.Loadout)
-            {
-                BuildLoadoutCard();
-                BuildItemsSettingsCard();
-            }
+            if (_edition.Loadout && _dataRoot != null) BuildLoadoutOnce();
             return;
         }
         BuildLoadoutCard();
@@ -113,10 +121,10 @@ public partial class MainWindow
         var warn = new TextBlock { Foreground = Brush("Warn"), FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         var card = new Card { Group = g, Root = root, Spinner = spinner, CustomPill = custom, EditedTag = edited, WarnLine = warn };
         // a preset whose source file is missing cannot be applied: greyed, the reason on hover (phase 7)
-        if (_dataRoot != null)
+        if (g.Root.Length > 0)
             for (int i = 0; i < g.Presets.Count; i++)
                 foreach (var st in g.Presets[i].Steps)
-                    if (st[0] is "put" or "putrestart" or "recipe" or "reciperestart" && !System.IO.File.Exists(System.IO.Path.Combine(_dataRoot, st[1])))
+                    if (st.Length > 1 && st[0] is "put" or "putrestart" or "recipe" or "reciperestart" && !System.IO.File.Exists(System.IO.Path.Combine(g.Root, st[1])))
                     { card.Missing[i] = st[1]; break; }
 
         var row = new WrapPanel();
@@ -153,7 +161,7 @@ public partial class MainWindow
             if (card.Missing.TryGetValue(pi, out var miss))
             {
                 // the release leaves out what cannot ship (the probe's main.lua is a game script: notes/16 3.3)
-                tip = DataRoot.IsRelease(_dataRoot!) ? $"{p.Name}\nNot in this version" : $"{p.Name}\n⚠ file missing: {miss}";
+                tip = DataRoot.IsRelease(g.Root) ? $"{p.Name}\nNot in this version" : $"{p.Name}\n⚠ file missing: {miss}";
                 box.Opacity = 0.35;
             }
             var btn = new Button { Style = (Style)FindResource("Bare"), Content = box, ToolTip = tip, IsEnabled = !p.Disabled && !card.Missing.ContainsKey(pi) };
@@ -243,8 +251,8 @@ public partial class MainWindow
 
     async Task RefreshModsAsync()
     {
-        if (_catalog == null || _dataRoot == null) return;
-        if (!GameLocator.IsGameDir(_settings.GamePath)) { ActiveEmpty.Content = "Set the game folder first"; return; }
+        if (_catalog == null) return;
+        if (!GameLocator.IsGameDir(_settings.GamePath)) { ActiveEmpty.Content = "Set the game folder first"; _ = RefreshSetupAsync(); return; }
         if (_modChecking) { _modCheckAgain = true; return; }
         _modChecking = true;
         try
@@ -252,17 +260,18 @@ public partial class MainWindow
             do
             {
                 _modCheckAgain = false;
-                var m = Matcher();
                 foreach (var c in _cards.Values) c.Spinner.Visibility = Visibility.Visible;
                 await _io.WaitAsync(); // never check while a preset is being written
                 try
                 {
                     // Each group is checked on the thread pool; each card updates as soon as its own answer is in.
-                    await Task.WhenAll(_catalog.Groups.Select(async g =>
+                    await Task.WhenAll(_catalog.Groups.ToList().Select(async g =>
                     {
+                        var m = Matcher(g.Root);
                         int idx = await Task.Run(() => m.Check(g));
+                        if (!_cards.TryGetValue(g.Id, out var card)) return;   // its pack was removed meanwhile
                         _active[g.Id] = idx;
-                        ShowActive(_cards[g.Id], idx);
+                        ShowActive(card, idx);
                     }));
                 }
                 finally { _io.Release(); }
@@ -271,6 +280,7 @@ public partial class MainWindow
                 if (_loList != null && !LoDirty) LoadLoadoutFromDisk(); // never throw away unsaved picks
                 if (_extra.Count == 0) LoadTweaksFromDisk(); else TweakChanged(); // the probe note follows the probe card
                 if (_slotTarget.Count == 0) LoadSlotsFromDisk();
+                _ = RefreshSetupAsync();
             } while (_modCheckAgain);
         }
         catch (Exception ex)

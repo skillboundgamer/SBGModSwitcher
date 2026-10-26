@@ -36,18 +36,50 @@ public sealed class ModApplier
 
     public static string DefaultRecycle => Path.Combine(AppSettings.Dir, "removed");
 
-    string Game(string rel) => Path.Combine(_game, rel);
-    string Src(string rel) => Path.Combine(_data, rel);
-    string Orig(string rel) => Path.Combine(DataRoot.BackupDir(_data), rel);
+    // the second wall (after PackManifest's checks, batch A 2026-10-26): every path is made full and must stay inside
+    // the game's mod\ or exec\, the data root, or the backup folder, else nothing is read, written or deleted
+    string Game(string rel)
+    {
+        var full = Path.GetFullPath(Path.Combine(_game, rel));
+        if (!Under(full, Path.Combine(_game, "mod")) && !Under(full, Path.Combine(_game, "exec")))
+            throw new InvalidOperationException($"refused: {rel} is outside the game's mod\\ and exec\\ folders (nothing was changed)");
+        return full;
+    }
+    string Src(string rel) => Inside(_data, rel, "the mod's data folder");
+    string Orig(string rel) => Inside(DataRoot.BackupDir(_data), Path.GetRelativePath(_game, Game(rel)), "the backup folder");
+
+    static string Inside(string root, string rel, string what)
+    {
+        var full = Path.GetFullPath(Path.Combine(root, rel));
+        if (!Under(full, root)) throw new InvalidOperationException($"refused: {rel} is outside {what} (nothing was changed)");
+        return full;
+    }
+
+    static bool Under(string full, string dir) =>
+        full.StartsWith(Path.GetFullPath(dir).TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Every path of a preset through the wall, before step 1: a refusal never leaves it half-applied.</summary>
+    void CheckPaths(ModPreset p)
+    {
+        foreach (var s in p.Steps)
+        {
+            if (s.Length == 0 || !PackManifest.StepKinds.TryGetValue(s[0], out var k) || s.Length != k.Len) continue;   // the switch below says why
+            foreach (var i in k.Game) Game(s[i]);
+            foreach (var i in k.Src) Src(s[i]);
+        }
+    }
 
     public ApplyResult Apply(ModPreset p)
     {
         if (p.Disabled) throw new InvalidOperationException($"'{p.Name}' cannot be applied: {p.DisabledWhy ?? "not built yet"}");
+        CheckPaths(p);
         if (NeedsClosedGame(p) && _gameRunning())
             throw new InvalidOperationException("Close the game first: this preset changes a file the game reads at start (nothing was changed)");
         CheckOriginals(p);
 
         var r = new ApplyResult();
+        // a missing MIO dump is taken from the player's own wad first (sha-checked; off the UI thread: Actions.ApplyAsync)
+        foreach (var f in DumpFill.FillMissing(_game)) if (f.LogLine is { } fl) r.Log.Add(fl);
         foreach (var s in p.Steps)
         {
             switch (s[0])

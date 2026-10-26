@@ -83,9 +83,16 @@ public partial class MainWindow
 
     // ---------- Restore all: fills the list, the player reviews it ----------
 
-    void RestoreAll_Click(object sender, RoutedEventArgs e)
+    async void RestoreAll_Click(object sender, RoutedEventArgs e)
     {
-        if (_catalog == null) return;
+        if (_catalog == null || _restoring) return;
+        _restoring = true;
+        try { await RestoreAllAsync(); } finally { _restoring = false; }
+    }
+    bool _restoring;   // a double click while the ini check runs counts once
+
+    async Task RestoreAllAsync()
+    {
         int n = 0;
         foreach (var g in _catalog.Groups)
             if (_active.TryGetValue(g.Id, out var i) && i != g.Vanilla) { _pending[g.Id] = g.Vanilla; n++; }
@@ -94,6 +101,7 @@ public partial class MainWindow
             if (_slotSize.TryGetValue(s.Wad, out var sz) && sz.Now != sz.Orig) { _slotTarget[s.Wad] = sz.Orig; SlotEdited(s); n++; }
         if (_extra.TryGetValue("figures", out var figEdit)) figEdit.Revert(); // King's Grave goes to Vanilla instead
         if (_loList != null && StageLoaderRemove(quiet: true)) n++;          // the loadout loader files this app put in (only while Off)
+        if (await StageIniRestoreAsync()) n++;                                         // the player's first GOWR_MIO.ini (Setup card Fix it)
         foreach (var c in _cards.Values) RenderCard(c);
         UpdatePendingUi();
         if (n == 0 && PendingCount == 0) { ShowToast("Nothing to restore: the game is vanilla", "Acc"); return; }
@@ -136,7 +144,7 @@ public partial class MainWindow
                 var gid = g.Id;
                 ConfirmRows.Children.Add(ReviewRow(g.Icon, g.Name,
                     $"{(from < 0 ? "Custom" : g.Presets[from].Label)}  →  {g.Presets[to].Label}", g.Reload,
-                    () => { _pending.Remove(gid); RenderCard(_cards[gid]); }, RowMarks(g.Id, g.Presets[to], g.Reload)));
+                    () => { _pending.Remove(gid); RenderCard(_cards[gid]); }, RowMarks(g.Id, g.Presets[to], g.Reload, g.Root)));
             }
         foreach (var (key, x) in _extra.ToList())
         {
@@ -206,7 +214,7 @@ public partial class MainWindow
 
     async Task ApplyPendingAsync(Dictionary<string, int> reviewed, List<ExtraEdit> extras, bool loadout)
     {
-        if (_catalog == null || _dataRoot == null || !GameLocator.IsGameDir(_settings.GamePath))
+        if (_catalog == null || !GameLocator.IsGameDir(_settings.GamePath))
         {
             ShowToast("Nothing applied: set the game folder first (Settings)", "Bad");
             return;

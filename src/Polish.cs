@@ -42,15 +42,15 @@ public partial class MainWindow
     }
 
     /// <summary>Marks for one Apply-list row: rule warnings, and "close the game first" when it writes a start-time file.</summary>
-    List<string> RowMarks(string key, ModPreset? preset, string reload)
+    List<string> RowMarks(string key, ModPreset? preset, string reload, string? root = null)
     {
         var marks = CurrentWarnings().TryGetValue(key, out var l) ? new List<string>(l) : new List<string>();
         if (_gameRunning == true)
         {
             bool startFile = false;
-            if (preset != null && _dataRoot != null && GameLocator.IsGameDir(_settings.GamePath))
+            if (preset != null && (root ?? _dataRoot) != null && GameLocator.IsGameDir(_settings.GamePath))
             {
-                try { startFile = new ModApplier(_settings.GamePath!, _dataRoot, ModApplier.DefaultRecycle, Matcher()).NeedsClosedGame(preset); }
+                try { startFile = new ModApplier(_settings.GamePath!, (root ?? _dataRoot)!, ModApplier.DefaultRecycle, Matcher(root)).NeedsClosedGame(preset); }
                 catch (Exception) { startFile = reload == "full"; }
             }
             else startFile = key == "fov" || key.StartsWith("slot:");

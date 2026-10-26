@@ -14,14 +14,14 @@ public partial class MainWindow
     bool _restartSeenStop;                           // the game was closed after the change (so its next start loads it)
     readonly StringBuilder _activity = new();
 
-    ModMatcher Matcher()
+    /// <summary>The matcher of one data root (a pack folder or the app's own); null = the app's data root. One per root, kept
+    /// while the game folder stays the same, so its hash cache lives on.</summary>
+    ModMatcher Matcher(string? root = null)
     {
-        if (_matcher == null || _matcherGame != _settings.GamePath)
-        {
-            _matcher = new ModMatcher(_settings.GamePath!, _dataRoot!);
-            _matcherGame = _settings.GamePath;
-        }
-        return _matcher;
+        root ??= _dataRoot!;
+        if (_matcherGame != _settings.GamePath) { _matchers.Clear(); _matcherGame = _settings.GamePath; }
+        if (!_matchers.TryGetValue(root, out var m)) _matchers[root] = m = new ModMatcher(_settings.GamePath!, root);
+        return m;
     }
 
     // ---------- apply ----------
@@ -31,8 +31,8 @@ public partial class MainWindow
     {
         var c = _cards[g.Id];
         c.Spinner.Visibility = Visibility.Visible;
-        var m = Matcher();
-        var applier = new ModApplier(_settings.GamePath!, _dataRoot!, ModApplier.DefaultRecycle, m);
+        var m = Matcher(g.Root);
+        var applier = new ModApplier(_settings.GamePath!, g.Root, ModApplier.DefaultRecycle, m);
         await _io.WaitAsync();
         try
         {
@@ -57,6 +57,7 @@ public partial class MainWindow
             _active[g.Id] = idx;
             ShowActive(c, idx);
             UpdateActiveChips();
+            _ = RefreshSetupAsync();
         }
     }
 
