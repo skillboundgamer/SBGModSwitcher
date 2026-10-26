@@ -1,0 +1,34 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Same settings as the release build: self-contained single-file exe, not compressed, no debug symbols
+      - name: Publish
+        run: >
+          dotnet publish src/ModSwitcher2.csproj -c Release -r win-x64 --self-contained true -o out
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=false -p:DebugType=None -p:DebugSymbols=false
+          -p:ContinuousIntegrationBuild=true -p:Deterministic=true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SBGModSwitcher-win-x64
+          path: |
+            out/SBGModSwitcher.exe
+            out/clrgc.dll
+          if-no-files-found: error
