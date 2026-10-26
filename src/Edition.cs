@@ -44,6 +44,8 @@ public sealed class Edition
     public string Discord { get; set; } = "";
     /// <summary>Optional Nexus Mods page link (Community row). Checked by <see cref="SafeUrl"/> when loaded.</summary>
     public string Nexus { get; set; } = "";
+    /// <summary>A mod pack (Packs.cs): the lowest app version that can show it, for example "2.0". "" = any.</summary>
+    public string NeedsSwitcher { get; set; } = "";
 
     static readonly string[] AllowedHosts = { "discord.gg", "discord.com", "nexusmods.com", "www.nexusmods.com" };
 
@@ -64,13 +66,29 @@ public sealed class Edition
         if (dataRoot == null) return null;
         var path = Path.Combine(dataRoot, FileName);
         if (!File.Exists(path)) return null;
-        var ed = JsonSerializer.Deserialize<Edition>(File.ReadAllText(path),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
-            ?? throw new InvalidDataException(FileName + " is empty");
+        return Parse(File.ReadAllText(path), FileName);
+    }
+
+    /// <summary>Read and check an edition or pack file; <paramref name="name"/> names it in the messages. A broken file throws.</summary>
+    public static Edition Parse(string json, string name)
+    {
+        Edition ed;
+        try
+        {
+            ed = JsonSerializer.Deserialize<Edition>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
+                ?? throw new InvalidDataException(name + " is empty");
+        }
+        catch (JsonException ex) { throw new InvalidDataException(name + " is not valid json: " + ex.Message); }
+        // a hand-written null must give a message, not a crash
+        ed.Id ??= ""; ed.Title ??= ""; ed.Version ??= ""; ed.NeedsSwitcher ??= "";
+        ed.Groups = (ed.Groups ?? new()).Where(g => !string.IsNullOrEmpty(g)).ToList();
+        ed.Tabs = (ed.Tabs ?? new()).Where(t => !string.IsNullOrEmpty(t)).ToList();
+        ed.Discord ??= ""; ed.Nexus ??= "";
         if (ed.Title.Length == 0 || ed.Groups.Count == 0)
-            throw new InvalidDataException(FileName + " needs a title and at least one group");
+            throw new InvalidDataException(name + " needs a title and at least one group");
         if (ed.Loadout && !ed.ShowsTab("valhalla"))   // the card is built on the Valhalla tab (LoadoutView.cs)
-            throw new InvalidDataException(FileName + ": \"loadout\" needs the valhalla tab");
+            throw new InvalidDataException(name + ": \"loadout\" needs the valhalla tab");
         ed.Discord = SafeUrl(ed.Discord);
         ed.Nexus = SafeUrl(ed.Nexus);
         // A hand-edited null list / null entry must not break the start; a card for a tab the edition does not show
@@ -81,10 +99,10 @@ public sealed class Edition
     }
 
     /// <summary>Keep only this edition's groups, and only the rules between them.</summary>
-    internal void Filter(ModCatalog cat)
+    internal void Filter(ModCatalog cat, string name = FileName)
     {
         foreach (var id in Groups)
-            if (!cat.Groups.Any(g => g.Id == id)) throw new InvalidDataException($"{FileName}: no group \"{id}\" in mods.json");
+            if (!cat.Groups.Any(g => g.Id == id)) throw new InvalidDataException($"{name}: no group \"{id}\" in mods.json");
         cat.Groups = cat.Groups.Where(g => Groups.Contains(g.Id)).ToList();
         cat.Rules = cat.Rules.Where(r => Groups.Contains(r.Edit) && Groups.Contains(r.While.Split('=')[0])).ToList();
     }

@@ -29,6 +29,10 @@ public sealed class ModGroup
     public string? Note { get; set; }
     public int Vanilla { get; set; }
     public List<ModPreset> Presets { get; set; } = new();
+    /// <summary>The data root the preset files come from: a pack folder (Packs.cs) or the app's own data root.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public string Root { get; set; } = "";
+    /// <summary>The pack this group came from; "" = the app's own mods.json.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public string PackId { get; set; } = "";
 }
 
 public sealed class ModCatalog
@@ -38,12 +42,38 @@ public sealed class ModCatalog
     public List<ModRule> Rules { get; set; } = new();
 
     /// <summary>An edition (Edition.cs) keeps only its own groups; null = the whole catalog.</summary>
-    public static ModCatalog Load(string path, Edition? edition = null)
+    public static ModCatalog Load(string path, Edition? edition = null) => Parse(File.ReadAllText(path), edition);
+
+    /// <summary>mods.json text; each group's <see cref="ModGroup.Root"/> is set by the caller.</summary>
+    public static ModCatalog Parse(string json, Edition? edition = null, string editionName = Edition.FileName)
     {
-        var cat = JsonSerializer.Deserialize<ModCatalog>(File.ReadAllText(path),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
-            ?? throw new InvalidDataException("mods.json is empty");
-        edition?.Filter(cat);
+        ModCatalog cat;
+        try
+        {
+            cat = JsonSerializer.Deserialize<ModCatalog>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
+                ?? throw new InvalidDataException("mods.json is empty");
+        }
+        catch (JsonException ex) { throw new InvalidDataException("mods.json is not valid json: " + ex.Message); }
+        // a hand-made file with null entries gives a message, not a crash
+        cat.Groups = (cat.Groups ?? new()).Where(g => g != null).ToList();
+        foreach (var g in cat.Groups)
+        {
+            g.Id ??= ""; g.Name ??= g.Id; g.Tab ??= "boss"; g.Icon ??= "IcSword"; g.Reload ??= "menu";
+            g.Presets = (g.Presets ?? new()).Where(p => p != null).ToList();
+            foreach (var p in g.Presets)
+            {
+                p.Name ??= "";
+                p.Steps = (p.Steps ?? new()).ToList();
+                if (p.Steps.Any(s => s == null || s.Length < 1 || s.Any(x => x == null)))
+                    throw new InvalidDataException($"mods.json: group \"{g.Id}\" has a broken step");
+            }
+            if (g.Presets.Count == 0 || g.Vanilla < 0 || g.Vanilla >= g.Presets.Count)
+                throw new InvalidDataException($"mods.json: group \"{g.Id}\" needs presets and a vanilla index inside them");
+        }
+        cat.Rules = (cat.Rules ?? new()).Where(r => r != null).ToList();
+        foreach (var r in cat.Rules) { r.Edit ??= ""; r.While ??= ""; r.Warn ??= ""; }
+        edition?.Filter(cat, editionName);
         return cat;
     }
 }
@@ -142,7 +172,7 @@ public sealed class ModMatcher
     Dictionary<string, string> LoadVanilla()
     {
         var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var p = Path.Combine(_data, "switcher2", "vanilla.json");
+        var p = DataRoot.VanillaPath(_data);
         if (!File.Exists(p)) return d;
         using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(p));
         foreach (var f in doc.RootElement.GetProperty("files").EnumerateObject()) d[f.Name] = f.Value.GetString()!;
@@ -207,7 +237,7 @@ public sealed class ModMatcher
 /// <summary>
 /// Where mods.json and the preset source files live:
 ///  - release (phase 8c): the "data" folder beside the exe, marked by data\release.txt (tools/mkrelease.py);
-///  - development: the project folder, found by walking up from the exe.
+///  - development: the dev repo folder, found by walking up from the exe.
 /// The paths inside are the same in both, so mods.json does not change.
 /// </summary>
 public static class DataRoot
@@ -228,8 +258,25 @@ public static class DataRoot
     public static bool IsRelease(string root) => File.Exists(Path.Combine(root, ReleaseMarker));
 
     /// <summary>
+    /// The game's own hashes. A pack carries none: it uses the app's copy, <c>data\switcher2\vanilla.json</c> beside
+    /// the exe (in development the dev repo one, found the same way as <see cref="Find"/>).
+    /// </summary>
+    public static string VanillaPath(string root)
+    {
+        var own = Path.Combine(root, "switcher2", "vanilla.json");
+        if (File.Exists(own)) return own;
+        var beside = Path.Combine(AppContext.BaseDirectory, "data", "switcher2", "vanilla.json");
+        if (File.Exists(beside)) return beside;
+        var tool = Path.Combine(AppContext.BaseDirectory, "data", "vanilla.json");   // the mod pack app (mkrelease.py --tool)
+        if (File.Exists(tool)) return tool;
+        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d != null; d = d.Parent)
+            if (File.Exists(Path.Combine(d.FullName, "switcher2", "vanilla.json"))) return Path.Combine(d.FullName, "switcher2", "vanilla.json");
+        return own;   // missing: the caller's own "no vanilla list" handling
+    }
+
+    /// <summary>
     /// The player's backups of the original game files: in a release under %LOCALAPPDATA%\SBGModSwitcher (the app
-    /// folder may be read-only or replaced by the next version); in development the shared originals folder.
+    /// folder may be read-only or replaced by the next version); in development the dev repo's shared originals folder.
     /// </summary>
     public static string BackupDir(string root) => IsRelease(root)
         ? Path.Combine(AppSettings.Dir, "originals", "game_files")

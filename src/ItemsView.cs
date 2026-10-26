@@ -18,11 +18,13 @@ public partial class MainWindow
     /// <summary>
     /// The built list for this language AND this game: the name holds a short key of the game folder and the size /
     /// date of the files it is built from, so another install or a game update builds a fresh list by itself.
+    /// The item rules version is in the key too: an app with new rules builds its own list (never an old app's).
     /// </summary>
     string ItemsPath(string lang)
     {
         var game = _settings.GamePath ?? "";
         var sb = new System.Text.StringBuilder(game.ToLowerInvariant());
+        sb.Append("|rules").Append(ItemsGen.RulesVersion);
         foreach (var rel in new[] { ItemsGen.PermDcb, ItemsGen.DumpScript, ItemsGen.LangWad(lang) })
         {
             var f = new FileInfo(Path.Combine(game, rel));
@@ -52,7 +54,8 @@ public partial class MainWindow
         string game = _settings.GamePath!;
         try
         {
-            var text = await Task.Run(() => ItemsGen.Build(game, lang));
+            // missing MIO dumps are taken from the player's own wads first (sha-checked), so no game launch is needed
+            var text = await Task.Run(() => { DumpFill.FillMissing(game); return ItemsGen.Build(game, lang); });
             Directory.CreateDirectory(AppSettings.Dir);
             var tmp = target + ".tmp";
             await File.WriteAllTextAsync(tmp, text, new System.Text.UTF8Encoding(false));
@@ -96,6 +99,7 @@ public partial class MainWindow
         _langBox = new ComboBox { ToolTip = "Language of item names and descriptions" };
         row.Children.Add(_langBox);
         sp.Children.Add(row);
+        _itemsCard = card;
         ViewSettings.Children.Add(card);
         FillLanguages();
         _langBox.SelectionChanged += async (_, _) =>

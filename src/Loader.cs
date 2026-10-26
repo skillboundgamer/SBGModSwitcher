@@ -55,12 +55,122 @@ public static class Loader
         var text = File.ReadAllText(ini);
         if (!IniOn(text, "dump", "lua")) return @"In mod\GOWR_MIO.ini set lua=1 under [dump], then start the game once.";
         if (!IniOn(text, "replace", "lua")) return @"In mod\GOWR_MIO.ini set lua=1 under [replace].";
+        return DumpProblem(gameRoot);
+    }
+
+    /// <summary>Why Kratos' saved script cannot be used (missing, or not Lua 5.2 bytecode); null = fine.</summary>
+    public static string? DumpProblem(string gameRoot)
+    {
         var dump = Path.Combine(gameRoot, Dump);
-        if (!File.Exists(dump)) return "Start the game once and load a save: GoWR MIO then saves Kratos' script, which the loadout needs.";
+        // missing but the player's wad is there: Install takes it from that wad first (DumpFill)
+        if (!File.Exists(dump) && File.Exists(Path.Combine(gameRoot, "exec", "wad", "pc_le", "r_heroa00.wad"))) return null;
+        if (!File.Exists(dump)) return "Kratos' script is missing (and r_heroa00.wad is not in the game): start the game once and load a save, GoWR MIO then saves it.";
         var head = new byte[LuaR.Length];
         using (var f = File.OpenRead(dump)) if (f.Read(head, 0, head.Length) != head.Length || !head.AsSpan().SequenceEqual(LuaR))
             return "Kratos' saved script is not the kind this version knows (game update?): the loadout stays off.";
         return null;
+    }
+
+    /// <summary>True when the four MIO switches the app needs are on: visualscript and lua under [dump] and [replace].</summary>
+    public static bool IniAllOn(string text) =>
+        IniKeys.All(k => IniOn(text, k.Section, k.Key));
+
+    static readonly (string Section, string Key)[] IniKeys =
+        { ("dump", "visualscript"), ("dump", "lua"), ("replace", "visualscript"), ("replace", "lua") };
+
+    /// <summary>Sets <paramref name="key"/>=1 under [<paramref name="section"/>]: a 0 value is changed in place, a missing key is
+    /// added right under the section line, a missing section is added at the end. Every other byte stays (comments, order,
+    /// CRLF or LF). Pure text in, text out.</summary>
+    public static string IniSet(string text, string section, string key)
+    {
+        string eol = text.Contains("\r\n") ? "\r\n" : "\n";
+        string cr = eol == "\r\n" ? "\r" : "";
+        var lines = text.Split('\n').ToList();   // a line keeps its own '\r'
+        int head = -1;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var t = lines[i].Trim();
+            if (i == 0 && t.StartsWith("ï»¿")) t = t[3..];   // a UTF-8 BOM read as Latin1; the bytes stay
+            if (t.Length == 0 || t[0] == ';') continue;
+            if (t[0] == '[')
+            {
+                if (head >= 0) break;                                  // the next section: the key is not in ours
+                if (t.Trim('[', ']').Trim().Equals(section, StringComparison.OrdinalIgnoreCase)) head = i;
+                continue;
+            }
+            if (head < 0) continue;
+            int eq = lines[i].IndexOf('=');
+            if (eq <= 0 || !lines[i][..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) continue;
+            var rest = lines[i][(eq + 1)..];
+            int semi = rest.IndexOf(';');                                 // an inline comment stays
+            var val = semi < 0 ? rest : rest[..semi];
+            if (val.Trim() == "1") return text;                          // already on
+            int ws = 0;
+            while (ws < rest.Length && (rest[ws] == ' ' || rest[ws] == '\t')) ws++;
+            // the space before the comment (or the CR) after the value stays
+            lines[i] = lines[i][..(eq + 1)] + rest[..ws] + "1" + val[Math.Max(ws, val.TrimEnd().Length)..] + (semi < 0 ? "" : rest[semi..]);
+            return string.Join("\n", lines);
+        }
+        if (head >= 0)
+        {
+            if (cr.Length > 0 && !lines[head].EndsWith('\r')) lines[head] += "\r";
+            bool wasLast = head == lines.Count - 1;                    // header is the last line, no final newline
+            lines.Insert(head + 1, key + "=1" + cr);
+            if (wasLast) lines.Add("");                                // end with a proper EOL, not a lone CR
+            return string.Join("\n", lines);
+        }
+        var sb = new StringBuilder(text);
+        if (text.Length > 0 && !text.EndsWith('\n')) sb.Append(eol);
+        sb.Append('[').Append(section).Append(']').Append(eol).Append(key).Append("=1").Append(eol);
+        return sb.ToString();
+    }
+
+    static string IniPath(string gameRoot) => Path.Combine(gameRoot, Ini);
+    static string IniBeside(string gameRoot) => IniPath(gameRoot) + ".sbgbak";
+    static string IniCopy(string gameRoot) =>
+        Path.Combine(Dir, "ini-" + Sha(Encoding.UTF8.GetBytes(RootKey(gameRoot)))[..10] + ".bak");
+    static string IniWritten(string gameRoot) => IniCopy(gameRoot) + ".sha";
+
+    /// <summary>Turns the four MIO switches on (see <see cref="IniSet"/>), after one backup of the player's ini. Returns plain text.</summary>
+    public static string IniFix(string gameRoot)
+    {
+        var path = IniPath(gameRoot);
+        if (!File.Exists(path)) return "Install GoWR MIO first";
+        var raw = File.ReadAllBytes(path);
+        var text = Encoding.Latin1.GetString(raw);     // Latin1 round-trips every byte
+        var fixedText = text;
+        foreach (var (sec, key) in IniKeys) fixedText = IniSet(fixedText, sec, key);
+        if (fixedText == text) return "GoWR MIO is already set";
+        if (!File.Exists(IniBeside(gameRoot))) File.WriteAllBytes(IniBeside(gameRoot), raw);   // never over an older backup
+        if (!File.Exists(IniCopy(gameRoot)))
+        {
+            Directory.CreateDirectory(Dir);
+            File.WriteAllBytes(IniCopy(gameRoot), raw);
+        }
+        var tmp = path + ".sbgtmp";
+        var written = Encoding.Latin1.GetBytes(fixedText);
+        File.WriteAllBytes(tmp, written);
+        File.Move(tmp, path, overwrite: true);
+        Directory.CreateDirectory(Dir);
+        File.WriteAllText(IniWritten(gameRoot), Sha(written));   // Restore checks the ini is still ours
+        return "GoWR MIO is set: dump and replace are on. Start the game once.";
+    }
+
+    /// <summary>True when the app changed the ini and the player's first version is still saved.</summary>
+    public static bool IniBackupExists(string gameRoot) => File.Exists(IniBeside(gameRoot)) || File.Exists(IniCopy(gameRoot));
+
+    /// <summary>Puts the player's first ini back (the backup beside it, else the app's copy) and removes the backups. Null = no backup.</summary>
+    public static string? IniRestore(string gameRoot)
+    {
+        var src = File.Exists(IniBeside(gameRoot)) ? IniBeside(gameRoot) : File.Exists(IniCopy(gameRoot)) ? IniCopy(gameRoot) : null;
+        if (src == null) return null;
+        var mark = IniWritten(gameRoot);
+        if (File.Exists(mark) && File.Exists(IniPath(gameRoot))
+            && Sha(File.ReadAllBytes(IniPath(gameRoot))) != File.ReadAllText(mark).Trim())
+            return "GoWR_MIO.ini changed since Fix it, left as it is";
+        File.Copy(src, IniPath(gameRoot), overwrite: true);
+        try { File.Delete(IniBeside(gameRoot)); File.Delete(IniCopy(gameRoot)); File.Delete(mark); } catch (IOException) { }
+        return "GoWR_MIO.ini is back as it was";
     }
 
     /// <summary>True when <paramref name="key"/>=1 in [<paramref name="section"/>] (MIO: only 1 is "on"; ; starts a comment).</summary>
@@ -74,7 +184,11 @@ public static class Loader
             if (line[0] == '[') { cur = line.Trim('[', ']').Trim(); continue; }
             int eq = line.IndexOf('=');
             if (eq <= 0 || !cur.Equals(section, StringComparison.OrdinalIgnoreCase)) continue;
-            if (line[..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) return line[(eq + 1)..].Trim() == "1";
+            if (line[..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                var v = line[(eq + 1)..]; int semi = v.IndexOf(';');
+                return (semi < 0 ? v : v[..semi]).Trim() == "1";
+            }
         }
         return false;
     }
@@ -114,6 +228,13 @@ public static class Loader
     {
         var log = new List<string>();
         if (Problem(gameRoot) is { } why) throw new InvalidOperationException(why);
+        // Kratos' dump from the player's own wad when MIO has not saved it yet (slow: callers run off the UI thread)
+        foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_heroa00"))
+        {
+            if (f.LogLine is { } fl) log.Add(fl);
+            if (f.Status != FillStatus.Present && f.Status != FillStatus.Filled) throw new InvalidOperationException((f.LogLine ?? "Kratos' script is missing")
+                + ". Start the game once and load a save: GoWR MIO then saves Kratos' script, then Apply again.");
+        }
         var recs = Records();
         var root = RootKey(gameRoot);
         foreach (var f in Files)   // every source first: a missing one must not leave half a chain in the game

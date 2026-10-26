@@ -144,6 +144,7 @@ public partial class MainWindow
 
         BuildBurdenBox(body);   // the burden glyphs under both columns (LoadoutBurdens.cs)
 
+        _loadoutRoot = root;   // packs hide it when the last loadout pack goes (PacksView.cs)
         ViewValhalla.Children.Add(root);
         FillLoKinds();
         LoadLoadoutFromDisk();

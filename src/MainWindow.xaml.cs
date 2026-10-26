@@ -52,6 +52,8 @@ public partial class MainWindow : Window
     /// <summary>Read data\edition.json. A broken file gives an empty edition (no tabs, no groups) and a start-up banner.</summary>
     bool LoadEdition()
     {
+        LoadPacks();
+        if (_packMode) { _edition = MergedPacksEdition(); return true; }
         try { _edition = Edition.Load(DataRoot.Find()); }
         catch (Exception ex)
         {
@@ -66,21 +68,27 @@ public partial class MainWindow : Window
     {
         Title = _edition!.Title;
         RailTitle.Text = _edition.Title;
-        var keys = new Dictionary<RadioButton, string> { [TabBoss] = "boss", [TabCompanions] = "companions", [TabValhalla] = "valhalla", [TabTweaks] = "tweaks" };
         var left = new List<RadioButton>();
         foreach (var t in tabs)
         {
-            if (keys.TryGetValue(t, out var key) && !_edition.ShowsTab(key)) { t.Visibility = Visibility.Collapsed; continue; }
+            if (TabKeys.TryGetValue(t, out var key) && !_edition.ShowsTab(key)) { t.Visibility = Visibility.Collapsed; continue; }
             left.Add(t);
             t.ToolTip = $"{t.Tag} (Ctrl+{left.Count})";
         }
+        ShowCommunity();
+        return left.ToArray();
+    }
+
+    Dictionary<RadioButton, string> TabKeys => new() { [TabBoss] = "boss", [TabCompanions] = "companions", [TabValhalla] = "valhalla", [TabTweaks] = "tweaks" };
+
+    void ShowCommunity()
+    {
         // Community row: URLs were checked when the edition was read (Edition.SafeUrl); empty = button hidden.
         DiscordButton.Tag = _edition.Discord;
         NexusButton.Tag = _edition.Nexus;
         DiscordButton.Visibility = _edition.Discord.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         NexusButton.Visibility = _edition.Nexus.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         CommunityRow.Visibility = _edition.Discord.Length + _edition.Nexus.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        return left.ToArray();
     }
 
     /// <summary>Open the button's link in the default browser: one Process.Start, no other work.</summary>
@@ -102,11 +110,17 @@ public partial class MainWindow : Window
     async Task StartAsync()
     {
         var v = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionValue.Text = _edition != null ? "v" + _edition.Version : v == null ? "v2" : $"v{v.Major}.{v.Minor}.{v.Build}";
+        VersionValue.Text = _edition != null && !_packMode ? "v" + _edition.Version : v == null ? "v2" : $"v{v.Major}.{v.Minor}.{v.Build}";
 
-        if (_settings.DisclaimerAccepted < DisclaimerVersion) ShowDisclaimer();
         BuildModCards();
+        BuildSetupCard();
+        GuideButton.Visibility = _packMode ? Visibility.Visible : Visibility.Collapsed;
+        if (GuideDemoOut != null) { await RunGuideDemoAsync(); return; }   // hidden --guide-demo mode (GuideDemo.cs)
+        bool demo = PerfOut != null || PackDemoOut != null;   // the timing / demo modes take their own screenshots
+        if (_packMode && !_settings.GuideDone && !demo) ShowGuide();   // the guide holds the disclaimer as its step 3
+        else if (_settings.DisclaimerAccepted < DisclaimerVersion) ShowDisclaimer();
         if (PerfOut != null) { await RunPerfAsync(); return; }   // hidden --perf timing mode (Perf.cs)
+        if (PackDemoOut != null) { await RunPackDemoAsync(); return; }   // hidden --pack-demo mode (PacksDemo.cs)
 
         // Path detection reads the registry and Steam's library list: off the UI thread.
         if (!GameLocator.IsGameDir(_settings.GamePath))
@@ -115,6 +129,7 @@ public partial class MainWindow : Window
             if (found != null) { _settings.GamePath = found; TrySave(); }
         }
         RefreshStatus();
+        GuideRefresh();   // the search may have found the game after the guide was drawn
         await CheckGameAsync();
         _watch.Start();
     }

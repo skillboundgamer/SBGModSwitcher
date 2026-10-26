@@ -10,7 +10,7 @@ public partial class MainWindow
     readonly ComboBox[] _loBurdenCombos = new ComboBox[Loadout.MaxBurdens];
     /// <summary>The burden glyphs picked now, in box order, without the empty boxes.</summary>
     List<string> _loBurdens => _loBurdenBox.Where(n => !string.IsNullOrEmpty(n)).ToList();
-    static readonly string[] BurdenKinds = Loadout.GlyphKinds.Where(k => k != "Stat").ToArray();   // no Stat glyphs in the burden slots
+    static readonly string[] BurdenKinds = Loadout.GlyphKinds.Where(k => k != "Stat" && k != "Technique").ToArray();   // no Stat or "+" glyphs in the burden slots (the plug-in turns "+" skills on only in the glyph list)
 
     /// <summary>Under both columns of the card: the burden glyphs (3 pickers).</summary>
     void BuildBurdenBox(StackPanel body)
