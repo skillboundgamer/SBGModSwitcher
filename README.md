@@ -33,3 +33,6 @@ The experimental Lab (`src/Lab.cs`, `src/LabView.cs`) is a stub here. Releases n
 ## Licence
 
 MIT, see `LICENSE.txt`. Credits: `CREDITS.md`.
+
+The licence covers the SBG Mod Switcher's own code and files only. It gives no rights to God of War Ragnarök or any
+of its files, which belong to Sony Interactive Entertainment. The app builds its mods from the user's own game files.
