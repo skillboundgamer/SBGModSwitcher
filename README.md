@@ -33,7 +33,7 @@ The experimental Lab (`src/Lab.cs`, `src/LabView.cs`) is a stub here. Releases n
 ## Download
 
 - [Nexus Mods](https://www.nexusmods.com/godofwarragnarok/mods/292): the release zip.
-- [GitHub Releases](https://github.com/Noumannomi123/SBGModSwitcher/releases): the same files.
+- [GitHub Releases](https://github.com/skillboundgamer/SBGModSwitcher/releases): the same files.
 
 Signed releases are built by this repo's GitHub Actions workflow (`.github/workflows/build.yml`) from the code here
 and signed through SignPath. See the code signing policy below.
@@ -44,8 +44,8 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
 [SignPath Foundation](https://signpath.org).
 
 Team roles:
-- Committers and reviewers: [Noumannomi123](https://github.com/Noumannomi123)
-- Approvers: [Noumannomi123](https://github.com/Noumannomi123)
+- Committers and reviewers: [skillboundgamer](https://github.com/skillboundgamer)
+- Approvers: [skillboundgamer](https://github.com/skillboundgamer)
 
 Only files built by this repo's GitHub Actions workflow from this repo's source code are signed.
 
