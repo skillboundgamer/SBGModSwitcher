@@ -9,7 +9,7 @@
     <AssemblyName>SBGModSwitcher</AssemblyName>
     <RootNamespace>ModSwitcher2</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
     <Product>SBG Mod Switcher</Product>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

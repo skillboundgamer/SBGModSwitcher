@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
@@ -145,6 +146,7 @@ public partial class MainWindow
                 st.Children.Add(Avatar(p.Label));
                 st.Children.Add(label);
                 label.Margin = new Thickness(0, 6, 0, 0);
+                TileLabel(label, p.Label);
                 box.Child = st;
                 box.Padding = new Thickness(8, 12, 8, 10);
                 box.Margin = new Thickness(0, 0, 8, 8);
@@ -176,6 +178,24 @@ public partial class MainWindow
         body.Children.Add(row);
         body.Children.Add(warn);
         return card;
+    }
+
+    /// <summary>A tile is 72 px wide: "Freya&lt;-Thrud" in one centered line was cut on both sides (2.0.2). "A&lt;-B" becomes
+    /// "A" over a smaller "← B"; any label that is still too wide ends in "…" (the full name is the tooltip).
+    /// Runs keep no colour or weight of their own, so RenderCard's Foreground / FontWeight on the TextBlock still apply.</summary>
+    static void TileLabel(TextBlock label, string text)
+    {
+        label.HorizontalAlignment = HorizontalAlignment.Stretch;
+        label.TextAlignment = TextAlignment.Center;
+        label.TextTrimming = TextTrimming.CharacterEllipsis;
+        int cut = text.IndexOf("<-", StringComparison.Ordinal);
+        if (cut <= 0) return;
+        string head = text[..cut].Trim(), rest = text[(cut + 2)..].Trim();
+        if (head.Length == 0 || rest.Length == 0) return;     // "Freya<- " stays one line, never an empty "← "
+        label.Text = null;
+        label.Inlines.Add(new Run(head));
+        label.Inlines.Add(new LineBreak());
+        label.Inlines.Add(new Run("← " + rest) { FontSize = 11.5 });
     }
 
     /// <summary>A grey card for something that is not ready (edition file "comingSoon"). Not a mod group: it is not in
