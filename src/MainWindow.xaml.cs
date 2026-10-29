@@ -37,6 +37,9 @@ public partial class MainWindow : Window
 
         RadioButton[] tabs = { TabOverview, TabBoss, TabCompanions, TabValhalla, TabTweaks };
         if (LoadEdition()) tabs = ApplyEditionChrome(tabs);
+#if SBG_DEV
+        Title = "SBG Switcher DEV";   // our own build (csproj SBG_DEV): never mixed up with the public installer
+#endif
         for (int i = 0; i < tabs.Length; i++)
         {
             var tab = tabs[i];

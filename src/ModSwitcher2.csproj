@@ -9,10 +9,19 @@
     <AssemblyName>SBGModSwitcher</AssemblyName>
     <RootNamespace>ModSwitcher2</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <Product>SBG Mod Switcher</Product>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- dotnet build = our dev Switcher with all mods: "SBG Switcher DEV" in the title, SBGSwitcherDev.exe (Task Manager
+       tells the two apart). dotnet publish (mkrelease tool build, GitHub Actions) = the public installer, title and
+       SBGModSwitcher.exe unchanged (2026-10-28). No code or XAML names the
+       assembly; the mutex and the AppData folder are fixed strings, so both builds still share them on purpose -->
+  <PropertyGroup Condition="'$(_IsPublishing)' != 'true'">
+    <DefineConstants>$(DefineConstants);SBG_DEV</DefineConstants>
+    <AssemblyName>SBGSwitcherDev</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
