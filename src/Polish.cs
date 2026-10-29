@@ -107,11 +107,12 @@ public partial class MainWindow
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
 
-    /// <summary>Called by App when a second copy starts: bring the first window to the front.</summary>
+    /// <summary>Called by App when a second copy starts: bring the first window to the front. Both builds share the
+    /// mutex, so the first copy may be the other exe (public SBGModSwitcher, dev SBGSwitcherDev).</summary>
     public static void FocusOtherInstance()
     {
         using var me = Process.GetCurrentProcess();
-        foreach (var p in Process.GetProcessesByName(me.ProcessName))
+        foreach (var p in Process.GetProcessesByName("SBGModSwitcher").Concat(Process.GetProcessesByName("SBGSwitcherDev")))
             using (p)
                 if (p.Id != me.Id && p.MainWindowHandle != IntPtr.Zero)
                 {

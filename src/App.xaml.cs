@@ -287,9 +287,12 @@ public partial class App : Application
             }
             case "--rules":
             {
-                // --rules FILE [--data D] : FILE = a RuleState as JSON; prints "key<TAB>warning" lines (tests only)
+                // --rules FILE [--data D] [--pack ZIP]... : FILE = a RuleState as JSON; prints "key<TAB>warning" lines
+                // (tests only). Each --pack zip adds its rules the way PacksView.AddPackGroups does.
                 var d = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
                 var rcat = ModCatalog.Load(DataRoot.CatalogPath(d), Edition.Load(d));
+                for (int i = 2; i + 1 < a.Length; i++)
+                    if (a[i] == "--pack") rcat.Rules.AddRange(PackManifest.FromZip(a[i + 1], PackManifest.AppVersion).Catalog.Rules);
                 var st = System.Text.Json.JsonSerializer.Deserialize<RuleState>(File.ReadAllText(a[1]),
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new RuleState();
                 foreach (var kv in Rules.Check(rcat.Rules, st).OrderBy(k => k.Key, StringComparer.Ordinal))

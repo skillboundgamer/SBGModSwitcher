@@ -77,6 +77,7 @@ public partial class MainWindow
             _catalog.Groups.Add(g);
             added.Add(g);
         }
+        foreach (var r in cat.Rules) r.PackId = p.Info.Id;
         _catalog.Rules.AddRange(cat.Rules);
         return added;
     }
@@ -561,6 +562,8 @@ public partial class MainWindow
         }
         var ids = gone.Select(g => g.Id).ToHashSet();
         _catalog.Groups.RemoveAll(g => ids.Contains(g.Id));
-        _catalog.Rules.RemoveAll(r => ids.Contains(r.Edit) || ids.Contains(r.While.Split('=')[0]));
+        // only this pack's own rules: another pack's rules against these groups stay (they warn again on a reinstall;
+        // a rule whose group is gone never fires, Rules.Check)
+        _catalog.Rules.RemoveAll(r => r.PackId == id);
     }
 }

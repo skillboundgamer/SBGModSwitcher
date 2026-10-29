@@ -6,6 +6,7 @@ public sealed class ModRule
     public string Edit { get; set; } = "";
     public string While { get; set; } = "";
     public string Warn { get; set; } = "";
+    [System.Text.Json.Serialization.JsonIgnore] public string PackId { get; set; } = "";   // the pack that brought it ("" = the app's own)
 }
 
 /// <summary>What the pending edits would leave behind, for the warning rules (no UI, so it can be tested headless).</summary>

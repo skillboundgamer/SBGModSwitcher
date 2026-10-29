@@ -14,7 +14,7 @@ public sealed class ComingSoon
 /// <summary>
 /// An "edition" is the same app showing only some mod groups (plan: notes/25 section 1 step 2, the Tyr edition).
 /// It exists when <c>data\edition.json</c> is in the data folder, the way <c>data\release.txt</c> marks a release
-/// (tools/mkrelease.py --edition puts it there; the source is switcher2/editions/&lt;id&gt;.json). Without that file
+/// (written by tests and by hand since 10-28; packs ship pack.json; the source is switcher2/editions/&lt;id&gt;.json). Without that file
 /// nothing changes. The name and version live in this one file only.
 ///   { "id": "tyr", "title": "...", "version": "1.2.0", "groups": ["valdoor", ...], "tabs": ["valhalla"],
 ///     "loadout": true, "comingSoon": [ { "title": "...", "text": "...", "tab": "valhalla" } ] }
@@ -98,12 +98,14 @@ public sealed class Edition
         return ed;
     }
 
-    /// <summary>Keep only this edition's groups, and only the rules between them.</summary>
+    /// <summary>Keep only this edition's groups, and the rules with at least one side in them: a rule against a group
+    /// of another pack (Any Companion vs the Tyr door) must reach the app, it warns once both packs are installed.
+    /// A rule whose other group is not there never fires (Rules.Check: Edited false, Final -1).</summary>
     internal void Filter(ModCatalog cat, string name = FileName)
     {
         foreach (var id in Groups)
             if (!cat.Groups.Any(g => g.Id == id)) throw new InvalidDataException($"{name}: no group \"{id}\" in mods.json");
         cat.Groups = cat.Groups.Where(g => Groups.Contains(g.Id)).ToList();
-        cat.Rules = cat.Rules.Where(r => Groups.Contains(r.Edit) && Groups.Contains(r.While.Split('=')[0])).ToList();
+        cat.Rules = cat.Rules.Where(r => Groups.Contains(r.Edit) || Groups.Contains(r.While.Split('=')[0])).ToList();
     }
 }
