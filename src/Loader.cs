@@ -26,8 +26,10 @@ public sealed class LoaderRecord
 /// <summary>
 /// The loader chain the Kratos loadout needs in the game (plan 2026-10-20, notes/state/tyr.md): the probe loader stub
 /// (Kratos' main.lua replacement: runs the game's own script from the player's MIO dump, then our tail), the probe
-/// tail mod\sbg_probe.lua (it loads mod\live.lua every ~2 s) and a small public mod\live.lua that loads only
-/// mod\sbg_loadout.lua. No game code ships: the game's script comes from the player's own dump.
+/// tail mod\sbg_probe.lua (it loads mod\live.lua every ~2 s) and a small public mod\live.lua that loads
+/// mod\sbg_loadout.lua and (v2, app 2.0.3) mod\sbg_twogna.lua; a missing one is skipped. Installed by the loadout card
+/// and by any preset with "loader": true (ModPreset.UsesLoader, Apply.cs). No game code ships: the game's script comes
+/// from the player's own dump.
 /// Rules: the player's MIO must dump and replace Lua and the dump must be Lua 5.2 bytecode (Problem), else nothing is
 /// installed; a missing file is installed; a file of ours already there (the developer's own probe or live.lua) is left
 /// alone; any other file is backed up first. Remove takes out only what this app wrote and puts the backups back.

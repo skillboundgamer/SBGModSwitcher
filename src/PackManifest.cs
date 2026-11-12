@@ -54,8 +54,11 @@ public sealed class PackManifest
                 }
             files.AddRange(seen.Select(f => new PackGameFile(g.Name, f)));
         }
-        if (info.Loadout)
-            files.AddRange(Loader.Files.Select(f => new PackGameFile("Kratos loadout", f.Game)));
+        // the loader chain once: for the loadout card, else for the presets that need it ("loader": true, 2.0.3)
+        var chainBy = info.Loadout ? "Kratos loadout"
+            : cat.Groups.Any(g => g.Presets.Any(p => p.UsesLoader)) ? "Lua plug-in loader" : null;
+        if (chainBy != null)
+            files.AddRange(Loader.Files.Select(f => new PackGameFile(chainBy, f.Game)));
         GameFiles = files;
     }
 

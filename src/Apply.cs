@@ -76,10 +76,19 @@ public sealed class ModApplier
         if (NeedsClosedGame(p) && _gameRunning())
             throw new InvalidOperationException("Close the game first: this preset changes a file the game reads at start (nothing was changed)");
         CheckOriginals(p);
+        // "loader": true (2.0.3): the player's MIO must run the loader chain, else a plain reason and the preset stays off
+        if (p.UsesLoader && Loader.Problem(_game) is { } why) throw new InvalidOperationException(why + " (nothing was changed)");
 
         var r = new ApplyResult();
         // a missing MIO dump is taken from the player's own wad first (sha-checked; off the UI thread: Actions.ApplyAsync)
         foreach (var f in DumpFill.FillMissing(_game)) if (f.LogLine is { } fl) r.Log.Add(fl);
+        // then the loader chain before step 1: Install checks every chain file of this data root (the pack folder or the
+        // app's data) before it writes one, so a missing one leaves the game as it was
+        if (p.UsesLoader)
+        {
+            foreach (var line in Loader.Install(_game, _data))
+                if (line.Contains(" <- ")) Changed(r, line); else r.Log.Add(line);
+        }
         foreach (var s in p.Steps)
         {
             switch (s[0])

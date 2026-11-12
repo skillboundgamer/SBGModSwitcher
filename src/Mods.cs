@@ -16,6 +16,10 @@ public sealed class ModPreset
     /// <summary>Why it is disabled, shown on hover (default "coming soon").</summary>
     public string? DisabledWhy { get; set; }
     public List<string[]> Steps { get; set; } = new();
+    /// <summary>mods.json "loader": true (2.0.3) = the preset puts a Lua plug-in in mod\ that only the loader chain runs
+    /// (Loader.cs): Apply installs the chain first (Loader.Problem refuses with a plain reason, nothing written), and the
+    /// preset counts as on only while the chain is in the game (Loader.Present).</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("loader")] public bool UsesLoader { get; set; }
     public string Label => string.IsNullOrEmpty(Short) ? Name : Short;
 }
 
@@ -106,6 +110,7 @@ public sealed class ModMatcher
     public bool Matches(ModPreset p)
     {
         if (p.Disabled) return false;
+        if (p.UsesLoader && !Loader.Present(_game)) return false;   // three File.Exists: the plug-in would not run
         foreach (var s in p.Steps)
         {
             bool ok = s[0] switch
