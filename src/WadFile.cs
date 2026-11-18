@@ -13,6 +13,9 @@ namespace ModSwitcher2;
 ///    (gameart\...) is inside the first 0x4000 bytes; its size = the size of the TOC entry named 0x%016X of SmsHash(path);
 ///  - a Lua script is a record: 0x100 path field (z:/int9/gameart/...), 0x100 name field, 4 zero bytes, then the Lua
 ///    chunk (\x1bLuaR); its size = the TOC entry (named like the file, no extension) minus 0x204.
+///  - a Lua library (gameart/scripts/libraries/...) is the same record with the module name ("core.color") in the name
+///    field and 01 00 00 00 in the 4 bytes; its TOC entry is still named like the file ("color"). Seen in r_perm.wad
+///    2026-11-18 (research/vanquisher/scripts/libdump_check.py).
 /// </summary>
 public static class WadFile
 {
@@ -60,14 +63,28 @@ public static class WadFile
 
     /// <summary>The Lua chunk of the record whose path field is <paramref name="recordPath"/> (z:/int9/gameart/...), or null + why.</summary>
     public static byte[]? LuaScript(string wadPath, string recordPath, string tocName, out string why)
+        => LuaRecord(wadPath, recordPath, tocName, tocName, CreatureFlag, out why);
+
+    /// <summary>
+    /// The Lua chunk of a library record: path field <paramref name="recordPath"/> (z:/int9/gameart/scripts/libraries/...),
+    /// name field = the module name <paramref name="module"/> ("core.color"), 01 00 00 00 before the chunk; the TOC entry
+    /// <paramref name="tocName"/> is the file name without extension ("color"). Null + why when not found.
+    /// </summary>
+    public static byte[]? LuaLibrary(string wadPath, string recordPath, string tocName, string module, out string why)
+        => LuaRecord(wadPath, recordPath, tocName, module, LibraryFlag, out why);
+
+    static readonly byte[] CreatureFlag = { 0, 0, 0, 0 };
+    static readonly byte[] LibraryFlag = { 1, 0, 0, 0 };
+
+    static byte[]? LuaRecord(string wadPath, string recordPath, string tocName, string nameField, byte[] flag, out string why)
     {
         var pat = Encoding.Latin1.GetBytes(recordPath + "\0");
-        var name = Encoding.Latin1.GetBytes(tocName + "\0");
+        var name = Encoding.Latin1.GetBytes(nameField + "\0");
         return Find(wadPath, tocName, pat, out why, (w, h, size) =>
         {
             if (size <= LuaHead || !w.Has(h, LuaHead + LuaR.Length)) return -1;
             if (!w.Span(h + 0x100, name.Length).SequenceEqual(name)) return -1;
-            if (w.Span(h + 0x200, 4).IndexOfAnyExcept((byte)0) >= 0) return -1;
+            if (!w.Span(h + 0x200, 4).SequenceEqual(flag)) return -1;
             return w.Span(h + LuaHead, LuaR.Length).SequenceEqual(LuaR) ? h + LuaHead : -1;
         }, size => size - LuaHead);
     }

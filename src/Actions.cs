@@ -36,7 +36,17 @@ public partial class MainWindow
         await _io.WaitAsync();
         try
         {
-            var r = await Task.Run(() => applier.Apply(p));
+            ApplyResult r;
+            try { r = await Task.Run(() => applier.Apply(p)); }
+            catch (VotgClashException vc)   // B2: nothing was written; ask once (UI thread, after the await)
+            {
+                var names = string.Join("\n", vc.Files.Select(f => "  " + Path.GetFileName(f)));
+                var ask = MessageBox.Show($"VOTG also changed these files:\n{names}\n\nApplying '{g.Name} -> {p.Label}' can break VOTG's changes, and VOTG's uninstall would put the old files back.\n\nApply anyway?",
+                    "VOTG clash", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (ask != MessageBoxResult.Yes) throw new InvalidOperationException("Cancelled: " + vc.Message);
+                applier.AllowVotgClash = true;
+                r = await Task.Run(() => applier.Apply(p));
+            }
             foreach (var line in r.Log) Log($"  {line}");
             bool full = r.FullRestart || (!r.NoChange && g.Reload == "full");
             Log($"{g.Name} -> {p.Label}: " + (r.NoChange ? "no change" : full ? "done, full game restart needed" : "done, " + ReloadBadge(g.Reload).Tip), "Ok");

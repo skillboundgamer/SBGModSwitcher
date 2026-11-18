@@ -61,6 +61,8 @@ public partial class App : Application
 
         switch (a[0])
         {
+            case "--votg":   // --votg --game D [--data D] : the VOTG check (Votg.cs; tests)
+                return Votg.Cli(Opt("--game") ?? throw new ArgumentException("--votg needs --game <folder>"), Opt("--data"), o);
             case "--libraries":
                 foreach (var p in GameLocator.ParseLibraryPaths(File.ReadAllText(a[1]))) o.WriteLine(p);
                 return 0;
@@ -81,7 +83,7 @@ public partial class App : Application
                 // through tools/install.py; this mode is for sandbox tests).
                 if (Opt("--game") == null) throw new ArgumentException("--apply needs --game <folder>");
                 var grp = cat.Groups.FirstOrDefault(g => g.Id == a[1]) ?? throw new ArgumentException("no group " + a[1]);
-                var r = new ModApplier(game, data, Opt("--recycle") ?? ModApplier.DefaultRecycle, m).Apply(grp.Presets[int.Parse(a[2])]);
+                var r = new ModApplier(game, data, Opt("--recycle") ?? ModApplier.DefaultRecycle, m) { AllowVotgClash = a.Contains("--force-votg") }.Apply(grp.Presets[int.Parse(a[2])]);
                 foreach (var line in r.Log) o.WriteLine(line);
                 o.WriteLine(r.NoChange ? "no change" : r.FullRestart ? "restart: full" : "restart: " + grp.Reload);
                 return 0;
@@ -145,6 +147,28 @@ public partial class App : Application
                 }
                 if (Opt("--names") is { } names) { Tweaks.BarNamesSet(g, names); o.WriteLine("names set"); }
                 if (Opt("--msgs") is { } msgs) { Tweaks.MsgsSet(g, msgs == "true"); o.WriteLine("msgs set"); }
+                return 0;
+            }
+            case "--tweak-speed":
+            {
+                // --tweak-speed --game D [--reset] : the custom walk speed ("-" = the game's own); --reset puts it back to default first (sandbox tests only)
+                var g = Opt("--game") ?? throw new ArgumentException("--tweak-speed needs --game <folder>");
+                if (Array.IndexOf(a, "--reset") >= 0) o.WriteLine("changed\t" + (Tweaks.SpeedReset(g, () => GameLocator.IsGameRunningIn(g)) ? "true" : "false"));
+                o.WriteLine($"speed\t{(Tweaks.SpeedGet(g)?.ToString() ?? "-")}");
+                return 0;
+            }
+            case "--tweak-fov":
+            {
+                // --tweak-fov --game D [--reset] : the custom FOV ("-" = the game's own); --reset comments it out first (sandbox tests only)
+                var g = Opt("--game") ?? throw new ArgumentException("--tweak-fov needs --game <folder>");
+                if (Array.IndexOf(a, "--reset") >= 0) o.WriteLine("changed\t" + (Tweaks.FovReset(g, () => GameLocator.IsGameRunningIn(g)) ? "true" : "false"));
+                o.WriteLine($"fov\t{(Tweaks.FovActiveGet(g)?.ToString() ?? "-")}");
+                return 0;
+            }
+            case "--firstopen-text":
+            {
+                // --firstopen-text SPEED|- FOV|- [--no-tweaks] : the text of the first-open dialog (tests)
+                o.Write(ModSwitcher2.MainWindow.FirstOpenText(a[1] == "-" ? null : int.Parse(a[1]), a[2] == "-" ? null : int.Parse(a[2]), Array.IndexOf(a, "--no-tweaks") < 0));
                 return 0;
             }
             case "--lab-fighters":
@@ -213,6 +237,10 @@ public partial class App : Application
                         bool? door = Opt("--door") is { } dv ? dv == "true" : null;
                         foreach (var sr in SetupCheck.Run(g, Opt("--data"), door, Opt("--exe-version")))
                             o.WriteLine($"{sr.Key}	{(sr.Ok == true ? "ok" : sr.Ok == false ? "no" : "unknown")}	{sr.Fix}	{sr.Next}");
+                        return 0;
+                    case "stub":   // --loader stub on|off : the old Kratos stub in the chain (off = hook only, test T1)
+                        Loader.SetStub(Opt("--set") != "off");
+                        o.WriteLine("stub\t" + (Loader.StubWanted(g) ? "on" : "off"));
                         return 0;
                     case "remove":
                         foreach (var line in Loader.Remove(g)) o.WriteLine(line);
