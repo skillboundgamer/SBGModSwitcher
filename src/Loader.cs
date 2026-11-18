@@ -70,6 +70,20 @@ public static class Loader
     static string Dir => Path.Combine(AppSettings.Dir, "loader");
     static string StatePath => Path.Combine(Dir, "loader.json");
 
+    /// <summary>The bytes of one loader source: the data root's file when it is there, else the copy built into this exe
+    /// (EmbeddedResource in ModSwitcher2.csproj, name "loader/&lt;file name&gt;"). A player's folder has no dev tree, so
+    /// without this copy the chain failed with "missing versions\...". Null = neither has it.</summary>
+    public static byte[]? SourceBytes(string dataRoot, string src)
+    {
+        var p = Path.Combine(dataRoot, src);
+        if (File.Exists(p)) return File.ReadAllBytes(p);
+        using var s = typeof(Loader).Assembly.GetManifestResourceStream("loader/" + Path.GetFileName(src));
+        if (s == null) return null;
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     /// <summary>Why the loader cannot work on this game, in plain words; null = it can.</summary>
     public static string? Problem(string gameRoot)
     {
@@ -328,10 +342,10 @@ public static class Loader
         var root = RootKey(gameRoot);
         var chain = FilesFor(gameRoot).Where(f => hookOk || f != Hook).ToArray();
         foreach (var f in chain)   // every source first: a missing one must not leave half a chain in the game
-            if (!File.Exists(Path.Combine(dataRoot, f.Src))) throw new FileNotFoundException("missing " + f.Src);
+            if (SourceBytes(dataRoot, f.Src) == null) throw new FileNotFoundException("missing " + f.Src);
         foreach (var f in chain)
         {
-            var want = File.ReadAllBytes(Path.Combine(dataRoot, f.Src));
+            var want = SourceBytes(dataRoot, f.Src)!;
             var dest = Path.Combine(gameRoot, f.Game);
             var have = File.Exists(dest) ? File.ReadAllBytes(dest) : null;
             if (have != null && have.AsSpan().SequenceEqual(want)) continue;                // already in

@@ -9,7 +9,7 @@
     <AssemblyName>SBGModSwitcher</AssemblyName>
     <RootNamespace>ModSwitcher2</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.0.4</Version>
+    <Version>2.0.4.1</Version>
     <Product>SBG Mod Switcher</Product>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -44,6 +44,15 @@
   <ItemGroup>
     <!-- One source with the old Switcher: LZ4, wad size table, King voice scan -->
     <Compile Include="..\switcher\GowrTools.cs" Link="GowrTools.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The loader chain's files, built into the exe (2.0.4.1): a player's folder has no versions\ folder, so the chain
+         failed for every pack with the loader on. Loader.SourceBytes reads these when the data folder has no copy. -->
+    <EmbeddedResource Include="loader\sbg_hook_color_v1.lua" LogicalName="loader/sbg_hook_color_v1.lua" />
+    <EmbeddedResource Include="loader\live_public.lua" LogicalName="loader/live_public.lua" />
+    <EmbeddedResource Include="loader\probe_stub_v20.lua" LogicalName="loader/probe_stub_v20.lua" />
+    <EmbeddedResource Include="loader\probe_tail_v115.lua" LogicalName="loader/probe_tail_v115.lua" />
   </ItemGroup>
 
 </Project>

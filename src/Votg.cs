@@ -123,8 +123,8 @@ public static class Votg
         {
             var stub = Loader.Files.First(f => Norm(f.Game) == Norm(KratosMain));
             if (dataRoot == null) return false;
-            var src = Path.Combine(dataRoot, stub.Src); var dst = Path.Combine(gameRoot, KratosMain);
-            return File.Exists(src) && File.Exists(dst) && File.ReadAllBytes(src).AsSpan().SequenceEqual(File.ReadAllBytes(dst));
+            var want = Loader.SourceBytes(dataRoot, stub.Src); var dst = Path.Combine(gameRoot, KratosMain);
+            return want != null && File.Exists(dst) && File.ReadAllBytes(dst).AsSpan().SequenceEqual(want);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
