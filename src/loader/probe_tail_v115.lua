@@ -2,7 +2,7 @@
 -- SBG probe v1.15 (public tail): the Mod Switcher installs it as mod\sbg_probe.lua beside the loader stub
 -- (versions/probe_stub_v20.lua), for the Kratos loadout of the public release (Straight To Tyr 1.2).
 -- It only loads mod\live.lua: re-read every 2 game seconds, its tick runs every frame. No mode switch, no boss director,
--- no on-screen messages, no creature log (Nouman 2026-10-21: "yes to both"; v1.14 keeps all of those for development).
+-- no on-screen messages, no creature log (2026-10-21: "yes to both"; v1.14 keeps all of those for development).
 -- Relative live.lua paths only (v1.14 also held an absolute path of one PC).
 -- Kept from v1.14 for the plug-ins: SBG.time (game seconds since this Kratos load), SBG.frames, SBG.kratos, SBG.ver,
 -- SBG.live (the live.lua path; the loadout loader makes mod\sbg_loadout.lua from it), SBG_API, SBG_LIVE_PATHS.
