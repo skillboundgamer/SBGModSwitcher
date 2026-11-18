@@ -9,7 +9,6 @@ public sealed record VotgInfo(string ModVersion, string Payload, string LoaderSh
     /// <summary>The one version tested with our hook: mod 2.0.0, payload 70e89488cadcba7a, loader 0b3b7acf... (VOTG 0.15.546).</summary>
     public const string TestedPayload = "70e89488cadcba7a";
     public const string TestedLoader = "0b3b7acf";
-    public const string TestedName = "VOTG 0.15.546";
 
     public bool Tested => Payload.StartsWith(TestedPayload, StringComparison.OrdinalIgnoreCase)
                           && LoaderSha.StartsWith(TestedLoader, StringComparison.OrdinalIgnoreCase);
@@ -18,7 +17,7 @@ public sealed record VotgInfo(string ModVersion, string Payload, string LoaderSh
     public string Text(bool hookInPlace)
     {
         if (OwnsColor) return "This VOTG version uses the file our Kratos mods need. They stay off while it is installed.";
-        if (Tested) return TestedName + " found. Our mods run beside it. The Switcher never changes VOTG files." + (hookInPlace ? "" : " Press Apply to turn our Kratos mods on.");
+        if (Tested) return $"VOTG mod {(ModVersion == "" ? "?" : ModVersion)} found (tested with this Switcher). Our mods run beside it. The Switcher never changes VOTG files." + (hookInPlace ? "" : " Press Apply to turn our Kratos mods on.");
         return $"VOTG {(ModVersion == "" ? "?" : ModVersion)} found: not tested with this Switcher. Our mods use their own file only. "
              + "If you see a problem, press Turn off our Kratos hook (VOTG stays as it is).";
     }
