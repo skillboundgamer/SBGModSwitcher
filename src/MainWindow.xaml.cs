@@ -135,6 +135,7 @@ public partial class MainWindow : Window
         GuideRefresh();   // the search may have found the game after the guide was drawn
         await CheckGameAsync();
         _watch.Start();
+        await FirstOpenSpeedAsync();   // SpeedFirstOpen.cs: a custom walk speed in the MIO ini goes back to default, once
     }
 
     // ---------- status ----------
@@ -151,6 +152,7 @@ public partial class MainWindow : Window
         SetStat(LoaderValue, LoaderIcon, !ok ? "—" : loader ? "Ready" : "Missing", !ok ? "Dim" : loader ? "Ok" : "Warn");
         UpdateBanner();
         _ = RefreshModsAsync();
+        _ = RefreshVotgAsync();   // VotgView.cs: scans once per game folder, off the UI thread
         FillLanguages();
         _ = EnsureItemsAsync(false);   // the loadout item list from this PC's game files (8b), once per language
     }

@@ -38,12 +38,33 @@ public static class Loader
 {
     public const string Ini = @"mod\GOWR_MIO.ini";
     public const string Dump = @"mod\dump\int9\gameart\scripts\characters\heroa00\main.lua";
-    public static readonly LoaderFile[] Files =
+    public const string VotgReceiptRel = @"mod\_votg_receipt.json";
+    public const string ColorDump = @"mod\dump\int9\gameart\scripts\libraries\core\color.lua";
+    public const string KratosMain = @"mod\int9\gameart\scripts\characters\heroa00\main.lua";
+    static readonly LoaderFile Stub = new(@"versions\probe_stub_v20.lua", KratosMain, "SBG probe");
+    /// <summary>The core.color hook (plan votg_switcher_only_plan.md, design B): a library VOTG does not ship, so the probe
+    /// starts beside VOTG's own Kratos script without any change to a VOTG file.</summary>
+    static readonly LoaderFile Hook = new(@"versions\sbg_hook_color_v1.lua", @"mod\int9\gameart\scripts\libraries\core\color.lua", "SBG hook");
+    static readonly LoaderFile Tail = new(@"tools\probe_tail_v115.lua", @"mod\sbg_probe.lua", "SBG probe");
+    static readonly LoaderFile Live = new(@"versions\live_public.lua", @"mod\live.lua", "SBG");
+    /// <summary>Every file the chain may write (any mode): lists for clash checks and packs.</summary>
+    public static readonly LoaderFile[] Files = { Stub, Hook, Tail, Live };
+
+    /// <summary>True when the VOTG launcher's receipt is in the game (read only; VOTG owns Kratos' main.lua then).</summary>
+    public static bool VotgActive(string gameRoot) => File.Exists(Path.Combine(gameRoot, VotgReceiptRel));
+    static string NoStubMarker => Path.Combine(Dir, "nostub");
+    /// <summary>True when the old Kratos stub is part of the chain: MIO without VOTG, and the player did not turn it off (test T1).</summary>
+    public static bool StubWanted(string gameRoot) => !VotgActive(gameRoot) && !File.Exists(NoStubMarker);
+    public static void SetStub(bool on)
     {
-        new(@"versions\probe_stub_v20.lua", @"mod\int9\gameart\scripts\characters\heroa00\main.lua", "SBG probe"),
-        new(@"tools\probe_tail_v115.lua", @"mod\sbg_probe.lua", "SBG probe"),
-        new(@"versions\live_public.lua", @"mod\live.lua", "SBG"),
-    };
+        Directory.CreateDirectory(Dir);
+        if (on) { if (File.Exists(NoStubMarker)) File.Delete(NoStubMarker); } else File.WriteAllText(NoStubMarker, "1");
+    }
+    /// <summary>The files this chain writes in this game folder (the hook is also skipped when core.color has no dump, see Install).</summary>
+    public static LoaderFile[] FilesFor(string gameRoot) =>
+        StubWanted(gameRoot) ? Files : Files.Where(f => f != Stub).ToArray();
+    /// <summary>The game is running: no file of the chain is written.</summary>
+    public static bool GameRunning() { try { return System.Diagnostics.Process.GetProcessesByName("GoWR").Length > 0; } catch (InvalidOperationException) { return false; } }
     static readonly byte[] LuaR = { 0x1b, (byte)'L', (byte)'u', (byte)'a', (byte)'R' };
 
     static string Dir => Path.Combine(AppSettings.Dir, "loader");
@@ -52,12 +73,25 @@ public static class Loader
     /// <summary>Why the loader cannot work on this game, in plain words; null = it can.</summary>
     public static string? Problem(string gameRoot)
     {
+        if (VotgActive(gameRoot))   // VOTG's loader runs our files: read only, nothing of VOTG is changed
+        {
+            if (VotgReceipt.Read(gameRoot) is { OwnsColor: true } owner) return owner.Text(false);
+            return File.Exists(Path.Combine(gameRoot, "winmm.dll")) ? ColorProblem(gameRoot) : @"VOTG is installed but its loader (winmm.dll) is missing.";
+        }
         var ini = Path.Combine(gameRoot, Ini);
         if (!File.Exists(ini)) return @"GoWR MIO is not installed (no mod\GOWR_MIO.ini).";
         var text = File.ReadAllText(ini);
         if (!IniOn(text, "dump", "lua")) return @"In mod\GOWR_MIO.ini set lua=1 under [dump], then start the game once.";
         if (!IniOn(text, "replace", "lua")) return @"In mod\GOWR_MIO.ini set lua=1 under [replace].";
-        return DumpProblem(gameRoot);
+        return StubWanted(gameRoot) ? DumpProblem(gameRoot) : ColorProblem(gameRoot);
+    }
+
+    /// <summary>Why the game's own core.color (the hook runs it first) cannot be used; null = there (or Install takes it from r_perm.wad).</summary>
+    public static string? ColorProblem(string gameRoot)
+    {
+        if (File.Exists(Path.Combine(gameRoot, ColorDump))) return null;
+        return File.Exists(Path.Combine(gameRoot, "exec", "wad", "pc_le", "r_perm.wad")) ? null
+            : "The game's core.color is missing (no dump, no r_perm.wad): start the game once with GoWR MIO, then Apply again.";
     }
 
     /// <summary>Why Kratos' saved script cannot be used (missing, or not Lua 5.2 bytecode); null = fine.</summary>
@@ -223,25 +257,79 @@ public static class Loader
     public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot)).ToList();
 
     /// <summary>True when every loader file is in the game (ours or the developer's own): the loadout can run.</summary>
-    public static bool Present(string gameRoot) => Files.All(f => File.Exists(Path.Combine(gameRoot, f.Game)));
+    public static bool Present(string gameRoot)
+    {
+        bool Has(LoaderFile f) => File.Exists(Path.Combine(gameRoot, f.Game));
+        // Kratos' script starts the probe by the stub (MIO) or by the hook (VOTG, or MIO with the stub off): one of them is enough
+        return Has(Tail) && Has(Live) && (Has(Stub) || Has(Hook));
+    }
+
+    /// <summary>True when every chain file is in the game with our exact bytes and no old stub of ours waits to be taken out: Install would write nothing.</summary>
+    static bool ChainInPlace(string gameRoot, string dataRoot)
+    {
+        try
+        {
+            var root = RootKey(gameRoot);
+            if (!StubWanted(gameRoot) && Records().Any(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase))) return false;
+            var hookOk = File.Exists(Path.Combine(gameRoot, ColorDump));   // no core.color dump = no hook (as in Install)
+            if (!StubWanted(gameRoot) && !hookOk) return false;                // no starter at all: Install would refuse
+            var recs = Records();
+            foreach (var f in FilesFor(gameRoot).Where(f => hookOk || f != Hook))
+            {
+                var src = Path.Combine(dataRoot, f.Src); var dst = Path.Combine(gameRoot, f.Game);
+                if (!File.Exists(src) || !File.Exists(dst)) return false;
+                var have = File.ReadAllBytes(dst);
+                if (File.ReadAllBytes(src).AsSpan().SequenceEqual(have)) continue;
+                // a developer's own copy (not our earlier version) is kept by Install: nothing to write either
+                bool appWrote = recs.Any(r => r.Root == root && r.Game.Equals(f.Game, StringComparison.OrdinalIgnoreCase) && r.Matches(Sha(have)));
+                if (appWrote || !Encoding.UTF8.GetString(have).Contains(f.Ours, StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 
     /// <summary>Puts the missing loader files in (see the class rules). Returns log lines; throws with the plain reason when it cannot.</summary>
     public static List<string> Install(string gameRoot, string dataRoot)
     {
         var log = new List<string>();
+        // a running game blocks only a real change: with the whole chain already in, the loadout can still be written live (review 2026-11-19)
+        if (GameRunning())
+        {
+            if (ChainInPlace(gameRoot, dataRoot)) return log;
+            throw new InvalidOperationException("The game is running: close it, then Apply again (nothing was changed).");
+        }
         if (Problem(gameRoot) is { } why) throw new InvalidOperationException(why);
+        bool stub = StubWanted(gameRoot);
+        // a first install beside a VOTG version we did not test asks once (the first Apply says so and stops, the next goes on)
+        if (!stub && VotgActive(gameRoot) && VotgReceipt.Read(gameRoot) is { Tested: false } unk && !File.Exists(Path.Combine(gameRoot, Hook.Game))
+            && !VotgReceipt.AskedAlready(unk.Payload + "|" + unk.LoaderSha + "|" + unk.ModVersion))
+            throw new InvalidOperationException($"VOTG {unk.ModVersion} is not tested with this Switcher. Our mods would use only their own file and change no VOTG file. Press Apply again to install anyway (nothing was changed).");
         // Kratos' dump from the player's own wad when MIO has not saved it yet (slow: callers run off the UI thread)
-        foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_heroa00"))
+        if (stub)
+            foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_heroa00"))
+            {
+                if (f.LogLine is { } fl) log.Add(fl);
+                if (f.Status != FillStatus.Present && f.Status != FillStatus.Filled) throw new InvalidOperationException((f.LogLine ?? "Kratos' script is missing")
+                    + ". Start the game once and load a save: GoWR MIO then saves Kratos' script, then Apply again.");
+            }
+        // the hook needs the game's own core.color: no dump and no matching r_perm.wad = no hook (nothing breaks)
+        bool hookOk = true;
+        foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_perm"))
         {
             if (f.LogLine is { } fl) log.Add(fl);
-            if (f.Status != FillStatus.Present && f.Status != FillStatus.Filled) throw new InvalidOperationException((f.LogLine ?? "Kratos' script is missing")
-                + ". Start the game once and load a save: GoWR MIO then saves Kratos' script, then Apply again.");
+            if (f.Status != FillStatus.Present && f.Status != FillStatus.Filled && f.Status != FillStatus.NoWad) hookOk = false;
         }
+        if (!File.Exists(Path.Combine(gameRoot, ColorDump))) hookOk = false;
+        if (!hookOk && !stub) log.Add("core.color hook: not installed (the game's core.color could not be taken)");
+        if (!hookOk && !stub) throw new InvalidOperationException("The game's core.color could not be taken, and the old Kratos script is off: nothing to install.");
+        if (!stub) RetireStub(gameRoot, log);
         var recs = Records();
         var root = RootKey(gameRoot);
-        foreach (var f in Files)   // every source first: a missing one must not leave half a chain in the game
+        var chain = FilesFor(gameRoot).Where(f => hookOk || f != Hook).ToArray();
+        foreach (var f in chain)   // every source first: a missing one must not leave half a chain in the game
             if (!File.Exists(Path.Combine(dataRoot, f.Src))) throw new FileNotFoundException("missing " + f.Src);
-        foreach (var f in Files)
+        foreach (var f in chain)
         {
             var want = File.ReadAllBytes(Path.Combine(dataRoot, f.Src));
             var dest = Path.Combine(gameRoot, f.Game);
@@ -302,9 +390,36 @@ public static class Loader
         return log;
     }
 
+    /// <summary>True when a saved earlier file may be put back. A saved Kratos script that is VOTG's own (it holds VOTG's own function
+    /// names) is put back only while VOTG is installed: alone it fails at line 1244 (no VOTG config) and the game closes (T1 run 1, 2026-11-18).</summary>
+    static bool CanRestore(string gameRoot, LoaderRecord r, string bak, List<string> log)
+    {
+        if (!r.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase) || VotgActive(gameRoot)) return true;
+        if (File.ReadAllBytes(bak).AsSpan().IndexOf("VOTG_"u8) < 0) return true;   // not VOTG's: restore as before
+        log.Add($"{r.Game}: the saved earlier file belongs to VOTG, which is not installed: not put back (kept in {bak})");
+        return false;
+    }
+
+    /// <summary>The stub is off (VOTG, or T1): takes our old Kratos stub out when it is still ours, and puts the file back that was there.</summary>
+    static void RetireStub(string gameRoot, List<string> log)
+    {
+        var recs = Records(); var root = RootKey(gameRoot);
+        var r = recs.FirstOrDefault(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase));
+        if (r == null) return;
+        var dest = Path.Combine(gameRoot, r.Game);
+        if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest)))) { log.Add($"{r.Game}: not ours now (VOTG or another mod), left as it is"); recs.Remove(r); SaveRecords(recs); return; }
+        if (File.Exists(dest)) File.Delete(dest);
+        var bak = r.Backup == null ? null : Path.Combine(Dir, r.Backup);
+        bool back = bak != null && File.Exists(bak) && CanRestore(gameRoot, r, bak, log);
+        if (back) File.Copy(bak!, dest, overwrite: true);
+        log.Add($"{r.Game}: our old Kratos script taken out" + (back ? ", the earlier file is back" : ""));
+        recs.Remove(r); SaveRecords(recs);
+    }
+
     /// <summary>Takes out the files this app wrote (only when they are still unchanged) and puts the backups back.</summary>
     public static List<string> Remove(string gameRoot)
     {
+        if (GameRunning()) throw new InvalidOperationException("The game is running: close it, then try again (nothing was changed).");
         var log = new List<string>();
         var recs = Records();
         var root = RootKey(gameRoot);
@@ -317,7 +432,7 @@ public static class Loader
             {
                 if (File.Exists(dest)) File.Delete(dest);
                 var bak = r.Backup == null ? null : Path.Combine(Dir, r.Backup);
-                if (bak != null && File.Exists(bak)) { File.Copy(bak, dest, overwrite: true); log.Add($"{r.Game}: your earlier file is back"); }
+                if (bak != null && File.Exists(bak) && CanRestore(gameRoot, r, bak, log)) { File.Copy(bak, dest, overwrite: true); log.Add($"{r.Game}: your earlier file is back"); }
                 else log.Add($"{r.Game}: removed");
             }
             recs.Remove(r);

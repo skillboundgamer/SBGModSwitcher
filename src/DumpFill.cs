@@ -8,7 +8,9 @@ namespace ModSwitcher2;
 /// <param name="Wad">wad name in exec\wad\pc_le (no extension)</param>
 /// <param name="DumpRel">where GoWR MIO writes the dump, relative to the game folder</param>
 /// <param name="Lua">true = a Lua record (heroa00 main.lua), false = a 'zZ' visual script blob</param>
-public sealed record DumpTarget(string Wad, string DumpRel, string Sha, int Size, bool Lua)
+/// <param name="Module">a Lua library: its module name ("core.color"), the record's name field (WadFile.LuaLibrary);
+/// null = a creature script (name field = the file name)</param>
+public sealed record DumpTarget(string Wad, string DumpRel, string Sha, int Size, bool Lua, string? Module = null)
 {
     /// <summary>The game path inside the wad: mod\dump\int9\gameart\... -> gameart\...</summary>
     public string GamePath => DumpRel[@"mod\dump\int9\".Length..].ToLowerInvariant();
@@ -39,6 +41,9 @@ public static class DumpFill
 {
     const string VsDir = @"mod\int9\gameart\visualscripts\valhalla\levels\valhalla\";
 
+    /// <summary>The MIO dump of the game library core.color (the carrier of the VOTG colour hook).</summary>
+    public const string ColorDump = @"mod\dump\int9\gameart\scripts\libraries\core\color.lua";
+
     public static readonly DumpTarget[] Targets =
     {
         // orig of recipes/val_val100_realmhub_door_gate.recipe
@@ -52,6 +57,9 @@ public static class DumpFill
         // the Valhalla progression script, read by the loadout item list (ItemsGen.DumpScript); its wad is not r_perm
         new("val010_realmscripts", ItemsGen.DumpScript,
             "bd5a7f4598eb46e6bdfd4a83b27ad7e2a6b90357f0c747397ac67be7a3aa23a9", 998048, false),
+        // the game library core.color: Kratos' script requires it, the VOTG colour hook loads these bytes
+        // (research/vanquisher/votg_switcher_only_plan.md sections 3 and 10; r_perm.wad +0x42d6609, 2026-11-18)
+        new("r_perm", ColorDump, "5fe49ff34902ef82431fcdab783d9a83b2ffcf23196b7dec1d4bbb82596d5b83", 681, true, "core.color"),
     };
 
     // a wad that did not give the right bytes is not decoded again in this run (same size + time = same file)
@@ -84,9 +92,10 @@ public static class DumpFill
                         res.Add(R(FillStatus.Differs, why: "checked before")); continue;
                     }
                 string why;
-                var bytes = t.Lua
-                    ? WadFile.LuaScript(wad, "z:/int9/" + t.GamePath.Replace('\\', '/'), Path.GetFileNameWithoutExtension(t.DumpRel), out why)
-                    : WadFile.VisualScript(wad, t.GamePath, out why);
+                var bytes = !t.Lua ? WadFile.VisualScript(wad, t.GamePath, out why)
+                    : t.Module != null
+                    ? WadFile.LuaLibrary(wad, "z:/int9/" + t.GamePath.Replace('\\', '/'), Path.GetFileNameWithoutExtension(t.DumpRel), t.Module, out why)
+                    : WadFile.LuaScript(wad, "z:/int9/" + t.GamePath.Replace('\\', '/'), Path.GetFileNameWithoutExtension(t.DumpRel), out why);
                 if (bytes == null) { Refuse(wad, fi); res.Add(R(FillStatus.NotFound, why: why)); continue; }
                 var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
                 if (bytes.Length != t.Size || sha != t.Sha)

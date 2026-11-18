@@ -16,6 +16,8 @@ public sealed class AppSettings
     public bool GuideDone { get; set; }
     /// <summary>Show the Lab (experimental tools) at the bottom of Boss Fights.</summary>
     public bool ShowExperimental { get; set; }
+    /// <summary>The first-open check of a custom walk speed in the MIO ini was done (SpeedFirstOpen.cs): it runs once.</summary>
+    public bool SpeedChecked { get; set; }
     /// <summary>Language of the loadout item list (the game's r_lang_*.wad code), English by default.</summary>
     public string ItemsLanguage { get; set; } = "en";
     /// <summary>The King's Grave figures last applied from this app (the files cannot be read back into the picker).</summary>

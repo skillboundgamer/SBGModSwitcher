@@ -20,7 +20,11 @@ public partial class MainWindow
     Path _fovCone = null!;
     ComboBox _namesMode = null!;
     TextBox _namesText = null!;
-    Border _fovEdited = null!, _namesEdited = null!, _msgsEdited = null!;
+    Border _fovEdited = null!, _namesEdited = null!, _msgsEdited = null!, _speedEdited = null!;
+    int? _speedSaved;     bool _speedReset;   // _speedSaved: the custom hero_speed in the ini (null = the game's own); _speedReset: reset waits in the Apply list
+    TextBlock _speedState = null!, _speedNote = null!;
+    Button _speedBtn = null!, _fovBtn = null!;
+    TextBlock _fovState = null!;   // "Game default" / "Custom: N" (what the ini says now)
 
     void BuildTweakCards()
     {
@@ -43,6 +47,14 @@ public partial class MainWindow
                                   TickFrequency = 1, VerticalAlignment = VerticalAlignment.Center };
         fovRow.Children.Add(_fovSlider);
         fovBody.Children.Add(fovRow);
+        var fovStateRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
+        _fovBtn = new Button { Style = (Style)FindResource("Btn"), Content = "Reset to game default", Padding = new Thickness(12, 6, 12, 6) };
+        DockPanel.SetDock(_fovBtn, Dock.Right);
+        _fovBtn.Click += (_, _) => _fovSwitch.IsChecked = false;   // the switch off = the game's own FOV; the Apply list holds it
+        fovStateRow.Children.Add(_fovBtn);
+        _fovState = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        fovStateRow.Children.Add(_fovState);
+        fovBody.Children.Add(fovStateRow);
         _fovSwitch.Checked += (_, _) => TweakChanged();
         _fovSwitch.Unchecked += (_, _) => TweakChanged();
         _fovSlider.ValueChanged += (_, _) => TweakChanged();
@@ -86,7 +98,21 @@ public partial class MainWindow
         _msgsSwitch.Checked += (_, _) => TweakChanged();
         _msgsSwitch.Unchecked += (_, _) => TweakChanged();
 
+        // ----- walk speed (reset only) -----
+        var (speedCard, speedBody, speedEdited) = TweakCard("IcBolt", "Kratos walk speed", "full", "Kratos' speed (mod\\GOWR_MIO.ini hero_speed, read at game start)");
+        _speedEdited = speedEdited;
+        _speedState = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+        speedBody.Children.Add(_speedState);
+        _speedNote = new TextBlock { FontSize = 12, Foreground = Brush("Dim"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0),
+                                     Text = "Reset only: this app never makes Kratos faster. A speed set in the MIO ini (its sample files do this) is put back to the game's own." };
+        speedBody.Children.Add(_speedNote);
+        _speedBtn = new Button { Style = (Style)FindResource("Btn"), Content = "Reset to game default", Padding = new Thickness(12, 6, 12, 6),
+                                 HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+        _speedBtn.Click += (_, _) => { _speedReset = true; TweakChanged(); };
+        speedBody.Children.Add(_speedBtn);
+
         ViewTweaks.Children.Add(fovCard);
+        ViewTweaks.Children.Add(speedCard);
         ViewTweaks.Children.Add(namesCard);
         ViewTweaks.Children.Add(msgsCard);
         _twBuilt = true;
@@ -121,6 +147,8 @@ public partial class MainWindow
         if (!_twBuilt || !GameLocator.IsGameDir(_settings.GamePath)) return;
         var game = _settings.GamePath!;
         try { _fovSaved = Tweaks.FovGet(game); } catch (Exception ex) { Log("FOV could not be read: " + ex.Message, "Bad"); _fovSaved = (false, 90); }
+        try { _speedSaved = Tweaks.SpeedGet(game); } catch (Exception ex) { Log("walk speed could not be read: " + ex.Message, "Bad"); _speedSaved = null; }
+        _speedReset = false;
         try { _namesSaved = Tweaks.BarNamesGet(game); } catch (Exception ex) { Log("boss bar names could not be read: " + ex.Message, "Bad"); _namesSaved = null; }
         try { _msgsSaved = Tweaks.MsgsGet(game); } catch (Exception ex) { Log("on-screen messages could not be read: " + ex.Message, "Bad"); _msgsSaved = null; }
         _twFilling = true;
@@ -155,6 +183,13 @@ public partial class MainWindow
         half = Math.Min(half, 98);
         _fovCone.Data = Geometry.Parse(FormattableString.Invariant($"M100 90 L{100 - half:0.#} 4 L{100 + half:0.#} 4 Z"));
         _fovCone.Opacity = _fovNow.On ? 1 : 0.35;
+        // FOV reading: what the ini says now, and a Reset while a custom FOV is on
+        bool fovCustom = _fovSaved.On;
+        bool fovResetPending = fovCustom && !_fovNow.On;
+        _fovState.Text = !fovCustom ? "Game default ✓" : fovResetPending ? $"Custom: {_fovSaved.Deg}°, reset waits in the Apply list" : $"Custom: {_fovSaved.Deg}°";
+        _fovState.Foreground = Brush(fovCustom && !fovResetPending ? "Warn" : "Ok");
+        _fovBtn.Visibility = fovCustom ? Visibility.Visible : Visibility.Collapsed;
+        _fovBtn.IsEnabled = fovCustom && _fovNow.On;
 
         // names: preview of boss 1's bar, requirements
         bool namesOk = _namesSaved != null;
@@ -176,6 +211,18 @@ public partial class MainWindow
                  $"{FovText(_fovSaved)} → {FovText(fov)}", "full",
                  () => WriteTweakAsync("Camera FOV", () => Tweaks.FovSet(game, fov.On, fov.Deg, () => GameLocator.IsGameRunningIn(game)), LoadFov),
                  () => { _twFilling = true; _fovSwitch.IsChecked = _fovSaved.On; _fovSlider.Value = Math.Clamp(_fovSaved.Deg, Tweaks.FovMin, Tweaks.FovMax); _twFilling = false; TweakChanged(); });
+        // walk speed: only a reset (never a higher speed); the row of the Apply list undoes it
+        bool speedCustom = _speedSaved != null;
+        _speedState.Text = speedCustom ? (_speedReset ? $"Custom speed {_speedSaved}: reset waits in the Apply list" : $"Custom speed {_speedSaved} (Kratos runs faster than the game)")
+                                       : "Game default ✓";
+        _speedState.Foreground = Brush(speedCustom && !_speedReset ? "Warn" : "Ok");
+        _speedBtn.IsEnabled = speedCustom && !_speedReset;
+        _speedBtn.Visibility = speedCustom ? Visibility.Visible : Visibility.Collapsed;
+        int? speedWas = _speedSaved;
+        SetExtra("speed", _speedEdited, speedCustom && _speedReset, "IcBolt", "Kratos walk speed",
+                 $"{speedWas} → game default", "full",
+                 () => WriteTweakAsync("Kratos walk speed", () => Tweaks.SpeedReset(game, () => GameLocator.IsGameRunningIn(game)), LoadSpeed),
+                 () => { _speedReset = false; TweakChanged(); });
         var names = _namesNow;
         SetExtra("names", _namesEdited, namesOk && names != (_namesSaved ?? "").Trim() && names.Length <= Tweaks.NameMax, "IcCrown", "Boss bar names",
                  $"{NamesText(_namesSaved ?? "")} → {NamesText(names)}", "hot",
@@ -237,6 +284,7 @@ public partial class MainWindow
 
     // reload one tweak only: the other tweaks may still hold unapplied edits
     void LoadFov() { _fovSaved = Tweaks.FovGet(_settings.GamePath!); TweakChanged(); }
+    void LoadSpeed() { _speedSaved = Tweaks.SpeedGet(_settings.GamePath!); _speedReset = false; TweakChanged(); }
     void LoadNames() { _namesSaved = Tweaks.BarNamesGet(_settings.GamePath!); TweakChanged(); }
     void LoadMsgs() { _msgsSaved = Tweaks.MsgsGet(_settings.GamePath!); TweakChanged(); }
 }

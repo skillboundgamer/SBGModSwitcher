@@ -3,6 +3,15 @@ using System.Security.Cryptography;
 
 namespace ModSwitcher2;
 
+/// <summary>An apply would write files VOTG also changed. Thrown before anything is written.</summary>
+public sealed class VotgClashException : InvalidOperationException
+{
+    public IReadOnlyList<string> Files { get; }
+    public VotgClashException(IReadOnlyList<string> files)
+        : base("VOTG also changed " + string.Join(", ", files.Select(Path.GetFileName)) + ". Applying this can break VOTG's changes, and VOTG's uninstall would put the old files back (nothing was changed)")
+    { Files = files; }
+}
+
 /// <summary>What one apply did.</summary>
 public sealed class ApplyResult
 {
@@ -33,6 +42,9 @@ public sealed class ModApplier
         _game = gameRoot; _data = dataRoot; _recycle = recycleDir; _m = matcher;
         _gameRunning = gameRunning ?? (() => GameLocator.IsGameRunningIn(gameRoot));
     }
+
+    /// <summary>The player (or --force-votg) said "Apply anyway" to a clash with a file VOTG changed.</summary>
+    public bool AllowVotgClash { get; set; }
 
     public static string DefaultRecycle => Path.Combine(AppSettings.Dir, "removed");
 
@@ -76,6 +88,8 @@ public sealed class ModApplier
         if (NeedsClosedGame(p) && _gameRunning())
             throw new InvalidOperationException("Close the game first: this preset changes a file the game reads at start (nothing was changed)");
         CheckOriginals(p);
+        // B2: a game file VOTG also changed: stop with the names (the app asks "Apply anyway?", the CLI needs --force-votg)
+        if (!AllowVotgClash && Votg.ClashFor(_game, p) is { Count: > 0 } clash) throw new VotgClashException(clash);
         // "loader": true (2.0.3): the player's MIO must run the loader chain, else a plain reason and the preset stays off
         if (p.UsesLoader && Loader.Problem(_game) is { } why) throw new InvalidOperationException(why + " (nothing was changed)");
 

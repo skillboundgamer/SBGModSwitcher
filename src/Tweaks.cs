@@ -58,6 +58,96 @@ public static class Tweaks
         return changed;
     }
 
+    // ---------- camera FOV: reset (first open, Game Tweaks) ----------
+
+    static readonly Regex FovLineRx = new(@"^([ \t]*)(fov_angle[ \t]*=[ \t]*)(\d*)", RegexOptions.IgnoreCase);
+
+    /// <summary>The custom FOV MIO would apply (fov_angle active and above 0, any value), or null = the game's own.</summary>
+    public static int? FovActiveGet(string gameRoot)
+    {
+        var ini = Path.Combine(gameRoot, MioIni);
+        if (!File.Exists(ini)) return null;
+        int? found = null;
+        foreach (var l in File.ReadAllLines(ini, Encoding.Latin1))
+        {
+            var m = FovLineRx.Match(l);
+            if (m.Success && int.TryParse(m.Groups[3].Value, out int v) && v > 0) found = v;
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Puts a ';' in front of every active fov_angle line (the value stays). One backup beside the ini, never over an older
+    /// one; bytes elsewhere are kept (Latin1 round trip). Returns true when the file changed (full game restart needed).
+    /// </summary>
+    public static bool FovReset(string gameRoot, Func<bool> gameRunning)
+    {
+        var ini = Path.Combine(gameRoot, MioIni);
+        if (FovActiveGet(gameRoot) == null) return false;
+        if (gameRunning()) throw new InvalidOperationException("Close the game first: the FOV is read at game start (nothing was changed)");
+        var raw = File.ReadAllBytes(ini);
+        var lines = Encoding.Latin1.GetString(raw).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var m = FovLineRx.Match(lines[i]);
+            if (m.Success && int.TryParse(m.Groups[3].Value, out int v) && v > 0) lines[i] = ";" + lines[i];
+        }
+        var bak = ini + ".sbg_original";
+        if (!File.Exists(bak)) File.WriteAllBytes(bak, raw);
+        var tmp = ini + ".sbgtmp";
+        File.WriteAllBytes(tmp, Encoding.Latin1.GetBytes(string.Join("\n", lines)));
+        File.Move(tmp, ini, overwrite: true);
+        if (FovActiveGet(gameRoot) != null) throw new IOException("FOV write verify failed");
+        return true;
+    }
+
+    // ---------- walk speed (reset only) ----------
+
+    /// <summary>MIO's hero_speed range: anything else (0, empty, out of range) is the game's own speed.</summary>
+    public const int SpeedMin = 10, SpeedMax = 20;
+    static readonly Regex SpeedLineRx = new(@"^([ \t]*)(hero_speed[ \t]*=[ \t]*)(\d*)", RegexOptions.IgnoreCase);
+
+    /// <summary>The custom walk speed MIO would apply (hero_speed active, 10..20), or null = the game's own speed.</summary>
+    public static int? SpeedGet(string gameRoot)
+    {
+        var ini = Path.Combine(gameRoot, MioIni);
+        if (!File.Exists(ini)) return null;
+        int? found = null;
+        foreach (var l in File.ReadAllLines(ini, Encoding.Latin1))
+        {
+            var m = SpeedLineRx.Match(l);
+            if (m.Success && int.TryParse(m.Groups[3].Value, out int v) && v >= SpeedMin && v <= SpeedMax) found = v;
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Puts a ';' in front of every active hero_speed line (the player's own line stays, only commented out). One backup
+    /// beside the ini, never over an older one. Bytes elsewhere are kept as they are (Latin1 round trip).
+    /// Returns true when the file changed (full game restart needed). The app never sets a speed: this is reset only.
+    /// </summary>
+    public static bool SpeedReset(string gameRoot, Func<bool> gameRunning)
+    {
+        var ini = Path.Combine(gameRoot, MioIni);
+        if (SpeedGet(gameRoot) == null) return false;
+        if (gameRunning()) throw new InvalidOperationException("Close the game first: the speed is read at game start (nothing was changed)");
+        var raw = File.ReadAllBytes(ini);
+        var lines = Encoding.Latin1.GetString(raw).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var m = SpeedLineRx.Match(lines[i]);
+            if (m.Success && int.TryParse(m.Groups[3].Value, out int v) && v >= SpeedMin && v <= SpeedMax)
+                lines[i] = ";" + lines[i];
+        }
+        var bak = ini + ".sbg_original";
+        if (!File.Exists(bak)) File.WriteAllBytes(bak, raw);
+        var tmp = ini + ".sbgtmp";
+        File.WriteAllBytes(tmp, Encoding.Latin1.GetBytes(string.Join("\n", lines)));
+        File.Move(tmp, ini, overwrite: true);
+        if (SpeedGet(gameRoot) != null) throw new IOException("speed write verify failed");
+        return true;
+    }
+
     // ---------- boss bar names ----------
 
     static readonly Regex NamesRx = new("(?m)^local BAR_NAMES = \"((?:[^\"\\\\]|\\\\.)*)\"");
