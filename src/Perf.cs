@@ -355,7 +355,8 @@ public partial class MainWindow
         _perf.Add($"  {"search arrow down",-34} {await PerfCase("shell: arrow down in the results", 12, i => () => SelectHit((_hitSel + 1) % Math.Max(1, _hits.Count))),6:0.0} ms");
         _perf.Add($"  {"search Enter (open + scroll)",-34} {await PerfCase("shell: Enter opens the hit ('fov' / 'kings')", 8, i => () => OpenHit(), i => { TabOverview.IsChecked = true; TopSearch.Text = i % 2 == 0 ? "fov" : "king's grave"; }),6:0.0} ms");
         // query -> the page it opens and the card that is in view (behaviour, not timing)
-        foreach (var (q, page, card) in new[] { ("back blades", "Game Tweaks", "Back Blades"), ("fov", "Game Tweaks", "Camera FOV"), ("loader", "Overview", "Script loader") })
+        // (no "back blades" query: the Back Blades card is dev only, so the public build would print a FAIL line)
+        foreach (var (q, page, card) in new[] { ("fov", "Game Tweaks", "Camera FOV"), ("loader", "Overview", "Script loader") })
         {
             TabOverview.IsChecked = true; TopSearch.Text = q; await Idle();
             string first = _hits.Count > 0 ? _hits[0].Entry.Title : "(none)";

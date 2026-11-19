@@ -96,12 +96,14 @@ public static class Votg
         return set;
     }
 
-    /// <summary>B2: the game files this preset writes that VOTG also changed (sorted, lower case); empty = no clash or no VOTG. Reads files only.</summary>
-    public static List<string> ClashFor(string gameRoot, ModPreset p)
+    /// <summary>B2: the game files this preset writes that VOTG also changed (sorted, lower case); empty = no clash or no VOTG. Reads files only.
+    /// <paramref name="writes"/> (Apply's own step test) drops the steps that would write nothing (file already as wanted).</summary>
+    public static List<string> ClashFor(string gameRoot, ModPreset p, Func<string[], bool>? writes = null)
     {
         var votg = BackupList(gameRoot);
         if (votg == null || votg.Count == 0) return new();
-        return p.Steps.Select(StepDest).Where(d => d != null && votg.Contains(d)).Select(d => d!).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+        return p.Steps.Where(s => s.Length > 0 && (writes == null || writes(s))).Select(StepDest)
+            .Where(d => d != null && votg.Contains(d)).Select(d => d!).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Reads files only. Runs off the UI thread, once per game folder.</summary>

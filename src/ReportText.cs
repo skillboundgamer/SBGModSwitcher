@@ -15,8 +15,8 @@ public static class ReportText
 {
     public const string DiscordInvite = "https://discord.gg/3DZ8hHUVvm";   // same invite as the Community row (Edition.SafeUrl allows it)
     public const string Hint = "Copied. Paste it in #bug-reports on Discord.";
-    const int ActivityTail = 40, MioTail = 60;
-    static readonly string[] FailWords = { "fail", "could not", "error", "not taken", "refused" };
+    internal const int ActivityTail = 40, MioTail = 60;   // shared with ReportV2 (one copy)
+    internal static readonly string[] FailWords ={ "fail", "could not", "error", "not taken", "refused" };
 
     /// <summary>Replace the game folder, the user's profile folder and the user name with placeholders (both slash styles).</summary>
     public static string Scrub(string text, string? gameDir, string? userDir, string? userName)

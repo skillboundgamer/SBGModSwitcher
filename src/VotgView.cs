@@ -24,11 +24,18 @@ public partial class MainWindow
         try
         {
             string? data = _dataRoot;
-            var (r, repair, mine) = await Task.Run(() =>
+            (VotgResult, List<string>, bool) res;
+            await _io.WaitAsync();   // Repair may write: never while a preset is being written
+            try
             {
-                var rep = Votg.Repair(game!, data);   // reads; writes only when our hook went missing (never a VOTG file)
-                return (Votg.Check(game!, data), rep, Loader.Mine(game!).Count > 0);
-            });
+                res = await Task.Run(() =>
+                {
+                    var rep = Votg.Repair(game!, data);   // reads; writes only when our hook went missing (never a VOTG file)
+                    return (Votg.Check(game!, data), rep, Loader.Mine(game!).Count > 0);
+                });
+            }
+            finally { _io.Release(); }
+            var (r, repair, mine) = res;
             _votgScanned = game;
             foreach (var l in repair) Log(l, "Warn");
             ShowVotg(r, r.Text(), r.Info != null && mine);
@@ -62,7 +69,11 @@ public partial class MainWindow
         VotgOff.IsEnabled = false;
         try
         {
-            foreach (var l in await Task.Run(() => Loader.Remove(game!))) Log("  " + l);
+            List<string> removed;
+            await _io.WaitAsync();   // never remove while a preset is being written
+            try { removed = await Task.Run(() => Loader.Remove(game!)); }
+            finally { _io.Release(); }
+            foreach (var l in removed) Log("  " + l);
             Log("Our Kratos hook is off. VOTG was not changed.", "Ok");
             _votgScanned = null;   // scan again
             await RefreshVotgAsync();

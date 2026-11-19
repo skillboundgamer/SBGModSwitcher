@@ -286,6 +286,7 @@ public partial class MainWindow
                 {
                     // Each group is checked on the thread pool; each card updates as soon as its own answer is in.
                     string gameNow = _settings.GamePath!;
+                    _loaderWait.Clear();   // a removed pack's group never answers again: start empty, each group sets its own
                     await Task.WhenAll(_catalog.Groups.ToList().Select(async g =>
                     {
                         var m = Matcher(g.Root);
@@ -348,31 +349,42 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>True when a step of the preset writes a file under mod\ (only a mod loader reads those).</summary>
+    static bool InModFolder(ModPreset p) =>
+        p.Steps.Any(s => Votg.StepDest(s) is { } d && d.StartsWith(@"mod\", StringComparison.Ordinal));
+
     void UpdateActiveChips()
     {
         if (_catalog == null) return;
         ActiveChips.Children.Clear();
+        // no mod loader at all (no MIO, no VOTG): nothing in mod\ is loaded, so those mods do not run (two file checks)
+        var gameNow = _settings.GamePath;
+        bool noLoader = GameLocator.IsGameDir(gameNow) && !GameLocator.HasModLoader(gameNow!) && !Loader.VotgActive(gameNow!);
+        int notRunning = 0;
         foreach (var g in _catalog.Groups)
         {
             if (!_active.TryGetValue(g.Id, out var idx) || idx == g.Vanilla) continue;
             bool waits = idx < 0 && _loaderWait.TryGetValue(g.Id, out var w) && (idx = w) >= 0;   // files in, loader out
             var what = idx < 0 ? "Custom" : g.Presets[idx].Label;
             bool usesLoader = idx >= 0 && g.Presets[idx].UsesLoader;
+            bool dead = noLoader && (idx >= 0 ? usesLoader || InModFolder(g.Presets[idx]) : g.Presets.Any(InModFolder));
+            if (dead) notRunning++;
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             sp.Children.Add(new TextBlock { Text = g.Name, VerticalAlignment = VerticalAlignment.Center });
             sp.Children.Add(new TextBlock { Text = what, Foreground = Brush("ThMuted"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            if (usesLoader)
-                sp.Children.Add(new TextBlock { Text = waits ? "needs loader" : "uses loader", FontSize = 11.5, FontWeight = FontWeights.SemiBold,
-                                                Foreground = Brush(waits ? "ThWarn" : "ThFaint"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            if (dead || usesLoader)
+                sp.Children.Add(new TextBlock { Text = dead ? "not running" : waits ? "needs loader" : "uses loader", FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+                                                Foreground = Brush(dead || waits ? "ThWarn" : "ThFaint"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
             var chip = new Button { Style = (Style)FindResource("Chip"), Content = sp,
-                                    ToolTip = waits ? "Its files are in, but the script loader is off: it does not run. Turn the loader on (Overview)."
+                                    ToolTip = dead ? "No mod loader (MIO or VOTG) in the game folder: this mod does not run. Install GoWR MIO."
+                                            : waits ? "Its files are in, but the script loader is off: it does not run. Turn the loader on (Overview)."
                                             : usesLoader ? "Runs through the script loader. Show this mod" : "Show this mod" };
-            if (waits) { chip.Background = Brush("ThWarnBg"); chip.BorderBrush = Brush("ThNeedLine"); }
+            if (dead || waits) { chip.Background = Brush("ThWarnBg"); chip.BorderBrush = Brush("ThNeedLine"); }
             chip.Click += (_, _) => GoToCard(g);
             ActiveChips.Children.Add(chip);
         }
         int n = ActiveChips.Children.Count;
-        ActiveHeader.Text = n == 0 ? "Active mods" : $"Active mods · {n}";
+        ActiveHeader.Text = n == 0 ? "Active mods" : $"Active mods · {n}" + (notRunning > 0 ? " (not running)" : "");
         ActiveEmpty.Content = "No mods active: the game is vanilla";
         ActiveEmpty.Visibility = n == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateNeedBanner();   // OverviewView.cs

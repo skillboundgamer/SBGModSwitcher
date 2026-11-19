@@ -89,7 +89,7 @@ public sealed class ModApplier
             throw new InvalidOperationException("Close the game first: this preset changes a file the game reads at start (nothing was changed)");
         CheckOriginals(p);
         // B2: a game file VOTG also changed: stop with the names (the app asks "Apply anyway?", the CLI needs --force-votg)
-        if (!AllowVotgClash && Votg.ClashFor(_game, p) is { Count: > 0 } clash) throw new VotgClashException(clash);
+        if (!AllowVotgClash && Votg.ClashFor(_game, p, WouldWrite) is { Count: > 0 } clash) throw new VotgClashException(clash);
         // "loader": true (2.0.3): the player's MIO must run the loader chain, else a plain reason and the preset stays off
         if (p.UsesLoader && Loader.Problem(_game) is { } why) throw new InvalidOperationException(why + " (nothing was changed)");
 
@@ -212,6 +212,17 @@ public sealed class ModApplier
     }
 
     /// <summary>Would this preset write a wad / size table (the files the game maps at start)?</summary>
+    /// <summary>False when Apply would skip this step (the file is already as the step wants it): the same tests as the
+    /// step loop below, so a step that writes nothing is no VOTG clash. slot / kingvo are always checked there: true.</summary>
+    bool WouldWrite(string[] s) => s[0] switch
+    {
+        "put" or "putrestart" => !_m.SameFile(Src(s[1]), Game(s[2])),
+        "rm" => File.Exists(Game(s[1])),
+        "recipe" or "reciperestart" => !_m.RecipeMatches(s[1], s[2]),
+        "restore" or "restorerestart" => !_m.RestoreMatches(s[1]),
+        _ => true,
+    };
+
     public bool NeedsClosedGame(ModPreset p)
     {
         foreach (var s in p.Steps)

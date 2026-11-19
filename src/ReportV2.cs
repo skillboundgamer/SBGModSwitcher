@@ -20,8 +20,8 @@ namespace ModSwitcher2;
 public static class ReportV2
 {
     public const int Cap = 200_000, LineCap = 300;
-    const int ActivityTail = 40, MioTail = 60, LoaderTail = 40, CrashLines = 30;
-    static readonly string[] FailWords = { "fail", "could not", "error", "not taken", "refused" };
+    const int ActivityTail = ReportText.ActivityTail, MioTail = ReportText.MioTail, LoaderTail = 40, CrashLines = 30;
+    static readonly string[] FailWords = ReportText.FailWords;   // one copy, in ReportText
     static readonly Regex MioNoise = new(@"^(VS|LUA): (loading|dumping) file ", RegexOptions.Compiled);
     static readonly Regex MioLuaLoad = new(@"^LUA: loading file ""(?<f>[^""]+)""", RegexOptions.Compiled);
     static readonly Regex Stamp = new(@"^\[(?<t>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)(\.\d+)?\] \[(?<src>[^\]]+)\] \[(?<lvl>[^\]]+)\] (?<msg>.*)$", RegexOptions.Compiled);
@@ -46,15 +46,7 @@ public static class ReportV2
         sb.AppendLine("  Game folder found: " + (found ? "yes" : "no"));
         if (found) sb.AppendLine("  Game exe: " + ExeText(Path.Combine(game!, GameLocator.ExeName)));
 
-        Section(sb, "What failed (from the Activity log)");
-        var failed = act.Where(l => FailWords.Any(w => l.Contains(w, StringComparison.OrdinalIgnoreCase))).TakeLast(15).ToList();
-        if (failed.Count == 0) sb.AppendLine("  (no failed line in this session)");
-        foreach (var l in failed) sb.AppendLine("  " + l.Trim());
-        Section(sb, "Last Apply");
-        var apply = act.Where(l => l.Contains("Apply", StringComparison.OrdinalIgnoreCase) || l.Contains("applied", StringComparison.OrdinalIgnoreCase)).TakeLast(8).ToList();
-        if (apply.Count == 0) sb.AppendLine("  (no Apply in this session)");
-        foreach (var l in apply) sb.AppendLine("  " + l.Trim());
-
+        FailedAndApply(sb, act);
         if (found)
         {
             Section(sb, "Crash (newest game crash dump)");
@@ -74,23 +66,7 @@ public static class ReportV2
 
         Section(sb, $"Activity log, last {ActivityTail} lines");
         foreach (var l in act.TakeLast(ActivityTail)) sb.AppendLine("  " + l.TrimEnd());
-        if (found)
-        {
-            var mio = ReadLines(Path.Combine(game!, "mod", "GOWR_MIO.log"));
-            Section(sb, $"GOWR MIO log ({mio.Count} lines; file load lines left out), last {MioTail}");
-            if (mio.Count == 0) sb.AppendLine("  (no GOWR_MIO.log found)");
-            foreach (var l in FilterMio(mio).TakeLast(MioTail)) sb.AppendLine("  " + l);
-            var sl = ReadLines(Path.Combine(game!, "GOWR-Script-Loader.log"));
-            if (sl.Count > 0)
-            {
-                Section(sb, $"Script loader log (GOWR-Script-Loader.log, {sl.Count} lines), warnings, errors and failed lines, last {LoaderTail}");
-                var bad = sl.Where(l => !l.Contains("] [info] ") || FailWords.Concat(new[] { "not loaded", "cannot" }).Any(w => l.Contains(w, StringComparison.OrdinalIgnoreCase))).TakeLast(LoaderTail).ToList();
-                if (bad.Count == 0) sb.AppendLine("  (none)");
-                foreach (var l in bad) sb.AppendLine("  " + l);
-                Section(sb, "Script loader log, last 15 lines");
-                foreach (var l in sl.TakeLast(15)) sb.AppendLine("  " + l);
-            }
-        }
+        if (found) GameLogs(sb, game!);
 
         // one very long log line (a loader's list of every loaded wad) must not fill the report: cut each line at 300
         // scrub first: a cut inside a path must never leave part of a user or folder name
@@ -102,6 +78,36 @@ public static class ReportV2
     }
 
     static void Section(StringBuilder sb, string title) { sb.AppendLine(); sb.AppendLine("== " + title + " =="); }
+
+    /// <summary>The "What failed" and "Last Apply" sections, from the Activity log lines.</summary>
+    static void FailedAndApply(StringBuilder sb, List<string> act)
+    {
+        Section(sb, "What failed (from the Activity log)");
+        var failed = act.Where(l => FailWords.Any(w => l.Contains(w, StringComparison.OrdinalIgnoreCase))).TakeLast(15).ToList();
+        if (failed.Count == 0) sb.AppendLine("  (no failed line in this session)");
+        foreach (var l in failed) sb.AppendLine("  " + l.Trim());
+        Section(sb, "Last Apply");
+        var apply = act.Where(l => l.Contains("Apply", StringComparison.OrdinalIgnoreCase) || l.Contains("applied", StringComparison.OrdinalIgnoreCase)).TakeLast(8).ToList();
+        if (apply.Count == 0) sb.AppendLine("  (no Apply in this session)");
+        foreach (var l in apply) sb.AppendLine("  " + l.Trim());
+    }
+
+    /// <summary>The MIO log (load noise left out) and the script loader log (bad lines, then the last 15).</summary>
+    static void GameLogs(StringBuilder sb, string game)
+    {
+        var mio = ReadLines(Path.Combine(game, "mod", "GOWR_MIO.log"));
+        Section(sb, $"GOWR MIO log ({mio.Count} lines; file load lines left out), last {MioTail}");
+        if (mio.Count == 0) sb.AppendLine("  (no GOWR_MIO.log found)");
+        foreach (var l in FilterMio(mio).TakeLast(MioTail)) sb.AppendLine("  " + l);
+        var sl = ReadLines(Path.Combine(game, "GOWR-Script-Loader.log"));
+        if (sl.Count == 0) return;
+        Section(sb, $"Script loader log (GOWR-Script-Loader.log, {sl.Count} lines), warnings, errors and failed lines, last {LoaderTail}");
+        var bad = sl.Where(l => !l.Contains("] [info] ") || FailWords.Concat(new[] { "not loaded", "cannot" }).Any(w => l.Contains(w, StringComparison.OrdinalIgnoreCase))).TakeLast(LoaderTail).ToList();
+        if (bad.Count == 0) sb.AppendLine("  (none)");
+        foreach (var l in bad) sb.AppendLine("  " + l);
+        Section(sb, "Script loader log, last 15 lines");
+        foreach (var l in sl.TakeLast(15)) sb.AppendLine("  " + l);
+    }
 
     /// <summary>MIO log lines without the per-file "loading / dumping" noise; the count of what was left out goes first.</summary>
     public static List<string> FilterMio(List<string> lines)
@@ -237,8 +243,15 @@ public static class ReportV2
             foreach (var (m, tag, n) in r.StackModules.Take(15)) o.Add($"  {m}  {n}  {tag}");
         }
         catch (Exception ex) { o.Add($"Dump: {dmp.Name}  (could not read: {ex.Message})"); }
+        LoaderCrashBlock(o, game, owners, when);
+        LoaderLinesBefore(o, game, owners, when);
+        MioLoadedLast(o, game, owners, when);
+        return o;
+    }
 
-        // the script loader's own crash report (VOTG loader), newest block, when it is within 10 min of the dump
+    /// <summary>The script loader's own crash report (VOTG loader), newest block; says whether it is within 10 min of the dump.</summary>
+    static void LoaderCrashBlock(List<string> o, string game, FileOwners owners, DateTime when)
+    {
         var crashLog = ReadLines(Path.Combine(game, "GOWR-Script-Loader-Crash.log"));
         int start = crashLog.FindLastIndex(l => l.StartsWith("====") && l.Contains("crash report"));
         if (start >= 0)
@@ -261,8 +274,11 @@ public static class ReportV2
                 foreach (var l in block.Skip(ev + 1).Where(l => l.Trim().Length > 0).TakeLast(CrashLines)) o.Add("    " + TagLine(l.Trim(), owners));
             }
         }
+    }
 
-        // loader log lines (with time stamps) up to the crash time, from this run's or the previous run's log
+    /// <summary>Loader log lines (with time stamps) up to the crash time, from this run's or the previous run's log.</summary>
+    static void LoaderLinesBefore(List<string> o, string game, FileOwners owners, DateTime when)
+    {
         var before = new List<string>();
         foreach (var name in new[] { "GOWR-Script-Loader.log", "GOWR-Script-Loader.previous.log" })
         {
@@ -278,8 +294,11 @@ public static class ReportV2
         o.Add("");
         if (before.Count == 0) o.Add("Script loader log: no lines from the 10 minutes before the crash (log of a later run, or no script loader).");
         o.AddRange(before);
+    }
 
-        // files loaded last according to the MIO log (only meaningful when the log is from the crashed run)
+    /// <summary>Files loaded last according to the MIO log (only meaningful when the log is from the crashed run).</summary>
+    static void MioLoadedLast(List<string> o, string game, FileOwners owners, DateTime when)
+    {
         var mio = ReadLines(Path.Combine(game, "mod", "GOWR_MIO.log"));
         var loads = mio.Select(l => MioLuaLoad.Match(l)).Where(m => m.Success).Select(m => m.Groups["f"].Value).TakeLast(10).ToList();
         if (loads.Count > 0)
@@ -289,7 +308,6 @@ public static class ReportV2
             o.Add($"Lua files loaded last (GOWR_MIO.log, written {mioTime:yyyy-MM-dd HH:mm}{(mioTime < when.AddMinutes(-10) || mioTime > when.AddMinutes(10) ? ", NOT the crash run" : "")}):");
             foreach (var f in loads) o.Add($"  {owners.TagScript(f),-7} {f}");
         }
-        return o;
     }
 
     static DateTime SafeTime(string p) { try { return File.GetLastWriteTime(p); } catch (Exception) { return DateTime.MinValue; } }
