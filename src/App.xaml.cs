@@ -272,6 +272,9 @@ public partial class App : Application
                 o.Write(ReportText.Build("9.9.9", act, mio, Opt("--game"), Opt("--user"), Opt("--name")));
                 return 0;
             }
+            case "--version":   // --version : the app version as the bottom bar and the report show it (tests)
+                o.WriteLine(ModSwitcher2.MainWindow.AppVersionText());
+                return 0;
             case "--edition":
             {
                 // --edition [--data D] : the edition file of a data folder (Edition.cs), "key<TAB>value" lines (tests only);

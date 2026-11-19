@@ -114,10 +114,17 @@ public partial class MainWindow : Window
         catch (Exception ex) { _startError = ex.Message; UpdateBanner(); }
     }
 
-    async Task StartAsync()
+    /// <summary>The app version as the release names it: 2.0.4, or 2.0.4.1 for a hotfix (the 4th number only when set).</summary>
+    internal static string AppVersionText()
     {
         var v = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionValue.Text = _edition != null && !_packMode ? "v" + _edition.Version : v == null ? "v2" : $"v{v.Major}.{v.Minor}.{v.Build}";
+        if (v == null) return "2";
+        return v.Revision > 0 ? $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}" : $"{v.Major}.{v.Minor}.{v.Build}";
+    }
+
+    async Task StartAsync()
+    {
+        VersionValue.Text = "v" + (_edition != null && !_packMode ? _edition.Version : AppVersionText());
 
         BuildModCards();
         BuildSetupCard();
