@@ -96,21 +96,27 @@ public sealed class ModMatcher
     public ModMatcher(string gameRoot, string dataRoot) { _game = gameRoot; _data = dataRoot; }
 
     /// <summary>Index of the first preset that holds, or -1 (custom: the files match none of them).</summary>
-    public int Check(ModGroup g)
+    public int Check(ModGroup g) => Check(g, false);
+
+    /// <summary>ignoreLoader: true = a "loader" preset whose files are in counts too (the Overview's "needs the script
+    /// loader, and it is off" list); the normal check says it is not on while the loader is out.</summary>
+    public int Check(ModGroup g, bool ignoreLoader)
     {
         for (int i = 0; i < g.Presets.Count; i++)
         {
             // A preset whose check throws (missing file, unreadable wad) is simply not active, as in the old app.
-            try { if (Matches(g.Presets[i])) return i; }
+            try { if (Matches(g.Presets[i], ignoreLoader)) return i; }
             catch (Exception) { }
         }
         return -1;
     }
 
-    public bool Matches(ModPreset p)
+    public bool Matches(ModPreset p) => Matches(p, false);
+
+    public bool Matches(ModPreset p, bool ignoreLoader)
     {
         if (p.Disabled) return false;
-        if (p.UsesLoader && !Loader.Present(_game)) return false;   // three File.Exists: the plug-in would not run
+        if (p.UsesLoader && !ignoreLoader && !Loader.Present(_game)) return false;   // three File.Exists: the plug-in would not run
         foreach (var s in p.Steps)
         {
             bool ok = s[0] switch

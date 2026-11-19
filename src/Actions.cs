@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -142,6 +143,25 @@ public partial class MainWindow
         if (open) ActivityScroll.ScrollToEnd();
     }
 
+    /// <summary>Report a problem (2026-11-13): builds the report off the UI thread, copies it, opens the Discord invite.</summary>
+    async void ReportProblem_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var v = Assembly.GetExecutingAssembly().GetName().Version;
+            string ver = _edition != null && !_packMode ? _edition.Version : v == null ? "2" : $"{v.Major}.{v.Minor}.{v.Build}";
+            string activity = _activity.ToString(), game = _settings.GamePath ?? "";
+            string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), name = Environment.UserName;
+            var text = await Task.Run(() => ReportText.Build(ver, activity, ReportText.ReadMioTail(game), game, user, name));
+            Clipboard.SetText(text);
+            ShowToast(ReportText.Hint, "Acc");
+            Log(ReportText.Hint);
+            Process.Start(new ProcessStartInfo(Edition.SafeUrl(ReportText.DiscordInvite)) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) { ShowToast("Could not make the report: " + ex.Message, "Bad"); }
+    }
+
+    // the old Copy-log button (whole activity log, no scrub); kept as a second button, undo = remove Report a problem
     void CopyLog_Click(object sender, RoutedEventArgs e)
     {
         try { Clipboard.SetText(_activity.Length == 0 ? "(empty)" : _activity.ToString()); ShowToast("Activity log copied", "Acc"); }

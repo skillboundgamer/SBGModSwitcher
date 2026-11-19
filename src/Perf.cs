@@ -331,10 +331,93 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>Revamp batch A: sidebar page click, Ctrl+K, the top search's key presses / arrow / Enter, plus three
+    /// behaviour checks (query -> page + card). Lines "shell check (...): OK / FAIL".</summary>
+    async Task PerfShell()
+    {
+        for (int k = 0; k < 40 && _search.Count == 0; k++) await Task.Delay(50);   // the index is built off the UI thread
+        _perf.Add($"--- shell: search index {_search.Count} entries");
+        _perf.Add($"  {"sidebar page click",-34} {await PerfCase("shell: sidebar page click (Boss / Tweaks)", 12, i => () => (i % 2 == 0 ? TabBoss : TabTweaks).IsChecked = true),6:0.0} ms");
+        TabOverview.IsChecked = true; await Idle();
+        // the first keyboard focus of ANY text box in the process starts Windows' text input (one-time, not ours): shown apart
+        if (Environment.GetEnvironmentVariable("PERF_TEXTWARM") == "1")
+        {
+            TabSettings.IsChecked = true; await Idle();
+            var w = await PerfOne(() => PathBox.Focus());
+            _perf.Add($"  first focus of another text box (warm-up): {w.idle,6:0.0} ms");
+            Keyboard.ClearFocus(); TabOverview.IsChecked = true; await Idle();
+        }
+        _perf.Add($"  {"Ctrl+K focus",-34} {await PerfCase("shell: Ctrl+K focus", 8, i => () => FocusTopSearch(), i => Keyboard.ClearFocus()),6:0.0} ms");
+        _perf.Add($"  {"search first char",-34} {await PerfCase("shell: search first char ('' -> 'b')", 12, i => () => TopSearch.Text = "b", i => TopSearch.Text = ""),6:0.0} ms");
+        _perf.Add($"  {"search next char",-34} {await PerfCase("shell: search next char ('bla' -> 'blad')", 12, i => () => TopSearch.Text = "blad", i => TopSearch.Text = "bla"),6:0.0} ms");
+        _perf.Add($"  {"search clear",-34} {await PerfCase("shell: search clear ('blad' -> '')", 12, i => () => TopSearch.Text = "", i => TopSearch.Text = "blad"),6:0.0} ms");
+        TopSearch.Text = "a"; await Idle();
+        _perf.Add($"  {"search arrow down",-34} {await PerfCase("shell: arrow down in the results", 12, i => () => SelectHit((_hitSel + 1) % Math.Max(1, _hits.Count))),6:0.0} ms");
+        _perf.Add($"  {"search Enter (open + scroll)",-34} {await PerfCase("shell: Enter opens the hit ('fov' / 'kings')", 8, i => () => OpenHit(), i => { TabOverview.IsChecked = true; TopSearch.Text = i % 2 == 0 ? "fov" : "king's grave"; }),6:0.0} ms");
+        // query -> the page it opens and the card that is in view (behaviour, not timing)
+        foreach (var (q, page, card) in new[] { ("back blades", "Game Tweaks", "Back Blades"), ("fov", "Game Tweaks", "Camera FOV"), ("loader", "Overview", "Script loader") })
+        {
+            TabOverview.IsChecked = true; TopSearch.Text = q; await Idle();
+            string first = _hits.Count > 0 ? _hits[0].Entry.Title : "(none)";
+            OpenHit(); await Idle(); await Task.Delay(100);
+            bool ok = PageTitle.Text == page && first.StartsWith(card, StringComparison.OrdinalIgnoreCase);
+            _perf.Add($"  shell check ('{q}' -> {page}, {card}): {(ok ? "OK" : $"FAIL first hit '{first}', page '{PageTitle.Text}'")}");
+        }
+        TabOverview.IsChecked = true;
+        // pictures of the shell beside OUT.txt (OUT.shell_*.png): Overview, the results panel, Game Tweaks.
+        // The chips get their real checks first (perf mode skips RefreshStatus): the process list and the sandbox's loader files.
+        await CheckGameAsync();
+        bool folderOk = GameLocator.IsGameDir(_settings.GamePath);
+        UpdateLoaderChip(folderOk, folderOk && GameLocator.HasModLoader(_settings.GamePath!));
+        await RefreshScriptLoaderAsync();   // the Overview cards read the sandbox (perf mode skips RefreshStatus)
+        await PerfShot("shell_overview");
+        // the sidebar slide (revamp batch B): open over the page, picture, close; the page's size must not change
+        double pageW = MainArea.ActualWidth;
+        ((System.Windows.Media.Animation.Storyboard)FindResource("RailOpen")).Begin(this);
+        await Task.Delay(650); await Idle();
+        await PerfShot("shell_rail");
+        _perf.Add($"  rail open: width {Rail.ActualWidth:0} px, page width {pageW:0} -> {MainArea.ActualWidth:0} px ({(pageW == MainArea.ActualWidth ? "OK, not pushed" : "FAIL, pushed")})");
+        ((System.Windows.Media.Animation.Storyboard)FindResource("RailClose")).Begin(this);
+        await Task.Delay(300); await Idle();
+        TopSearch.Text = "blad"; await Idle();
+        await PerfShot("shell_search");
+        TopSearch.Text = ""; TabTweaks.IsChecked = true; await Idle();
+        await PerfShot("shell_tweaks");
+        TabOverview.IsChecked = true;
+    }
+
+    /// <summary>A PNG of the whole window content beside OUT.txt.</summary>
+    async Task PerfShot(string tag)
+    {
+        await Task.Delay(150); await Idle();
+        try
+        {
+            var host = (FrameworkElement)Content;
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)host.ActualWidth, (int)host.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();   // the window's own background first (Content alone is transparent)
+            using (var dc = dv.RenderOpen())
+            {
+                dc.DrawRectangle(Background, null, new Rect(0, 0, host.ActualWidth, host.ActualHeight));
+                dc.DrawRectangle(new VisualBrush(host), null, new Rect(0, 0, host.ActualWidth, host.ActualHeight));
+            }
+            bmp.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using var f = File.Create(PerfOut + "." + tag + ".png");
+            enc.Save(f);
+        }
+        catch (Exception ex) { _perf.Add("    png: " + ex.Message); }
+    }
+
     async Task RunPerfAsync()
     {
         try
         {
+            if (Environment.GetEnvironmentVariable("PERF_ONLY") == "shell")   // only the window shell (revamp batch A, 11-18)
+            {
+                await PerfShell();
+                throw new OperationCanceledException("shell only");
+            }
             TabValhalla.IsChecked = true;
             await Idle();
             await Task.Delay(500);
@@ -347,6 +430,7 @@ public partial class MainWindow
             Keyboard.ClearFocus();
             await PerfTimings("after a dropdown opened");
             if (Environment.GetEnvironmentVariable("PERF_REFRESH") != "0") await PerfRefresh();
+            await PerfShell();
             _perf.Add("--- summary: median to-idle ms (before / after a dropdown opened)");
             foreach (var (n, b, a) in _perfSum) _perf.Add($"  {n,-28} {b,6:0.0} / {a,6:0.0}");
         }

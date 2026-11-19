@@ -81,6 +81,12 @@ public partial class MainWindow
         var game = _settings.GamePath;
         sb.AppendLine($"Game folder: {(GameLocator.IsGameDir(game) ? game : "NOT FOUND")}");
         sb.AppendLine($"Mod loader: {(GameLocator.IsGameDir(game) && GameLocator.HasModLoader(game!) ? "found" : "missing")}  |  Game running: {(_gameRunning == true ? "yes" : "no")}");
+        // the Overview's answers (read off the UI thread already): no file work on this click
+        sb.AppendLine($"Game exe: {_ldr?.ExeVersion ?? "-"}  |  Script loader: "
+                      + (_ldr == null ? "-" : _ldr.Present ? (_ldr.Mine ? "in (ours)" : "in (not ours)") : "off")
+                      + (_ldr?.Problem is { } lp ? " (cannot run: " + lp + ")" : "")
+                      + (_loaderWait.Count > 0 ? "  |  waiting for it: " + string.Join(", ", WaitingNames()) : ""));
+        sb.AppendLine("VOTG: " + (_votgLine ?? "not found"));
         sb.AppendLine("Mods:");
         if (_catalog != null)
             foreach (var g in _catalog.Groups)
@@ -98,7 +104,7 @@ public partial class MainWindow
         sb.AppendLine("Last activity:");
         var lines = _activity.ToString().TrimEnd().Split('\n');
         foreach (var line in lines.Skip(Math.Max(0, lines.Length - 50))) sb.AppendLine("  " + line.TrimEnd('\r'));
-        try { Clipboard.SetText(sb.ToString()); ShowToast("Bug report copied: paste it into your message", "Ok"); }
+        try { Clipboard.SetText(sb.ToString()); ShowToast("Diagnostic info copied: paste it into your message", "Ok"); }
         catch (Exception ex) { ShowToast("Could not copy: " + ex.Message, "Bad"); }
     }
 

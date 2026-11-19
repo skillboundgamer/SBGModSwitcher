@@ -10,6 +10,7 @@
     <RootNamespace>ModSwitcher2</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>2.0.4.1</Version>
+    <ApplicationIcon>logo\app.ico</ApplicationIcon>
     <Product>SBG Mod Switcher</Product>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -40,6 +41,12 @@
     </ItemGroup>
     <Error Condition="'@(_ClrGcFound)' == ''" Text="clrgc.dll not found in the runtime pack (System.GC.Name needs it)" />
   </Target>
+
+  <ItemGroup>
+    <!-- The app logo (switcher-identity): window icon (set in code) and sidebar picture -->
+    <Resource Include="logo\app.ico" />
+    <Resource Include="logo\logo_72.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- One source with the old Switcher: LZ4, wad size table, King voice scan -->

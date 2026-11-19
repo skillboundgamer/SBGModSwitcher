@@ -4,8 +4,9 @@ using System.Windows.Media;
 
 namespace ModSwitcher2;
 
-/// <summary>The loader line of the Kratos loadout card (Loader.cs): can this game run the loadout, is the loader in,
-/// and "Remove loader" (a row of the Apply list).</summary>
+/// <summary>The loader line of the Kratos loadout card (Loader.cs): can this game run the loadout, is the loader in.
+/// Turning the loader on and off moved to the Overview (OverviewView.cs, revamp batch B); "Remove" stays a row of the
+/// Apply list.</summary>
 public partial class MainWindow
 {
     StackPanel _loLoader = null!;   // the loader line (Loader.cs): can this game run the loadout, is the loader in
@@ -45,35 +46,30 @@ public partial class MainWindow
         _loLoader.Children.Add(IconPath(icon, tone, 0.5));
         _loLoader.Children.Add(new TextBlock { Text = text, Foreground = Brush(tone), FontSize = 12, Margin = new Thickness(5, 0, 0, 0),
                                                VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 520 });
-        _loLoader.ToolTip = tip;
-        bool mine = false;
-        try { mine = Loader.Mine(game).Count > 0; } catch (System.IO.IOException) { }
-        if (mine)   // only files this app put in: a developer's own probe / live.lua never gets this button
-        {
-            var rm = new Button { Style = (Style)FindResource("Btn"), Content = "Remove loader", Padding = new Thickness(8, 2, 8, 2),
-                                  Margin = new Thickness(10, 0, 0, 0), FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
-                                  ToolTip = "Takes the 3 loader files out of the game and puts back what was there before.\n"
-                                            + "First: loadout Off + Apply, then visit the Valhalla shore once (your own items come back)." };
-            rm.Click += (_, _) => StageLoaderRemove();
-            _loLoader.Children.Add(rm);
-        }
+        _loLoader.ToolTip = tip + "\nTurn the script loader on or off on the Overview page.";
     }
 
-    /// <summary>"Remove loader" (button, or Restore all): one row of the Apply list. Only while the loadout is Off on
-    /// disk and in the picks: the plug-in needs the loader to give the player's own items back.</summary>
+    /// <summary>"Remove" on the Overview's script loader card (or Restore all): one row of the Apply list that names the
+    /// mods that stop. Only while the loadout is Off on disk and in the picks: the plug-in needs the loader to give the
+    /// player's own items back (2026-10-21).</summary>
     bool StageLoaderRemove(bool quiet = false)
     {
         if (!GameLocator.IsGameDir(_settings.GamePath)) return false;
         string game = _settings.GamePath!;
-        if (Loader.Mine(game).Count == 0) return false;
+        if (_ldr is { Mine: false } || (_ldr == null && Loader.Mine(game).Count == 0)) return false;
         if (_loSaved.On || _loOnNow)
         {
             if (!quiet) ShowToast("Loadout Off + Apply first, then visit the Valhalla shore once: your own items come back", "Warn");
             return false;
         }
-        _extra["loader"] = new ExtraEdit("valhalla", "IcShield", "Loadout loader", "In the game → removed (earlier files come back)",
-            "checkpoint", () => RemoveLoaderAsync(game), () => _extra.Remove("loader"));
+        _extra.Remove("loaderon");
+        var stops = LoaderUsers();
+        _extra["loader"] = new ExtraEdit("overview", "IcPlug", "Script loader",
+            "In the game → removed (earlier files come back)" + (stops.Count == 0 ? "" : ". Stops: " + string.Join(", ", stops)),
+            "checkpoint", () => RemoveLoaderAsync(game), () => { _extra.Remove("loader"); UpdateScriptLoaderCard(); });
         UpdatePendingUi();
+        UpdateScriptLoaderCard();
+        if (!quiet && stops.Count > 0) ShowToast("After Apply these stop until the loader is on again: " + string.Join(", ", stops), "Warn");
         return true;
     }
 
@@ -97,7 +93,9 @@ public partial class MainWindow
         finally
         {
             _io.Release();
-            LoCheckLoader();
+            if (_loList != null) LoCheckLoader();
+            _ = RefreshScriptLoaderAsync();
+            _ = RefreshModsAsync();   // its mods now wait for the loader (Overview banner)
         }
     }
 }

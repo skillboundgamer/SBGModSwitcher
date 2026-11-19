@@ -3,6 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnMainWindowClose">
   <Application.Resources>
+   <ResourceDictionary>
+    <!-- the revamp style tokens (Theme.xaml, dark only); the keys below stay for the tab cards until batch C -->
+    <ResourceDictionary.MergedDictionaries>
+      <ResourceDictionary Source="Theme.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
 
     <!-- Colours (same tokens as research/switcher2/mockup.html) -->
     <SolidColorBrush x:Key="Bg" Color="#0D1014"/>
@@ -403,5 +408,6 @@
       <Setter Property="FontSize" Value="12"/>
     </Style>
 
+   </ResourceDictionary>
   </Application.Resources>
 </Application>

@@ -63,6 +63,11 @@ public partial class App : Application
         {
             case "--votg":   // --votg --game D [--data D] : the VOTG check (Votg.cs; tests)
                 return Votg.Cli(Opt("--game") ?? throw new ArgumentException("--votg needs --game <folder>"), Opt("--data"), o);
+            case "--search":   // --search QUERY [--data D] [--game D] : the top search box's hits (SearchIndex.cs; tests), UTF-8
+            {
+                using var u8 = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
+                return SearchIndex.Cli(a.Length > 1 ? a[1] : "", Opt("--data"), Opt("--game"), u8);
+            }
             case "--libraries":
                 foreach (var p in GameLocator.ParseLibraryPaths(File.ReadAllText(a[1]))) o.WriteLine(p);
                 return 0;
@@ -223,6 +228,16 @@ public partial class App : Application
                         o.WriteLine($"present\t{(Loader.Present(g) ? "true" : "false")}");
                         foreach (var rec in Loader.Records().Where(x => x.Root == Loader.RootKey(g))) o.WriteLine($"record\t{rec.Game}\t{rec.Backup ?? "-"}");
                         return 0;
+                    case "uses":   // --loader uses --game D [--data D] : who stops on Remove / who waits for the loader (Overview)
+                    {
+                        var ud = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
+                        var lu = LoaderUse.Scan(ModCatalog.Load(DataRoot.CatalogPath(ud), Edition.Load(ud)), g, ud);
+                        o.WriteLine($"present\t{(Loader.Present(g) ? "true" : "false")}");
+                        foreach (var n in lu.Uses) o.WriteLine("uses\t" + n);
+                        foreach (var n in lu.Waits) o.WriteLine("waits\t" + n);
+                        o.WriteLine("remove\t" + (LoaderUse.RemoveBlock(g) ?? "ok"));
+                        return 0;
+                    }
                     case "install":
                         var d = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
                         foreach (var line in Loader.Install(g, d)) o.WriteLine(line);
@@ -248,6 +263,14 @@ public partial class App : Application
                     default:
                         throw new ArgumentException("--loader check|install|remove");
                 }
+            }
+            case "--report-text":
+            {
+                // --report-text --activity FILE --mio FILE --game DIR --user DIR --name N : the Report a problem text (ReportText.cs; tests only)
+                var act = Opt("--activity") is { } af ? File.ReadAllText(af) : "";
+                var mio = Opt("--mio") is { } mf ? File.ReadAllLines(mf) : Array.Empty<string>();
+                o.Write(ReportText.Build("9.9.9", act, mio, Opt("--game"), Opt("--user"), Opt("--name")));
+                return 0;
             }
             case "--edition":
             {
