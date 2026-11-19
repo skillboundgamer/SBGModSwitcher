@@ -180,11 +180,9 @@ public static class ReportV2
         var o = new List<string>();
         try
         {
-            var errs = new List<string>();
-            var packs = Packs.List(errs);
+            var packs = FileOwners.PacksReadOnly();   // read only: never Packs.List here (it deletes hidden folders)
             o.Add($"Installed packs: {packs.Count}");
-            foreach (var p in packs) o.Add($"  {p.Info.Id}  version {p.Info.Version}  ({p.Info.Groups.Count} mod{(p.Info.Groups.Count == 1 ? "" : "s")}: {string.Join(", ", p.Info.Groups)})");
-            foreach (var e in errs) o.Add("  pack problem: " + e);
+            foreach (var (_, info) in packs) o.Add($"  {info.Id}  version {info.Version}  ({info.Groups.Count} mod{(info.Groups.Count == 1 ? "" : "s")}: {string.Join(", ", info.Groups)})");
         }
         catch (Exception ex) { o.Add("(could not read the packs: " + ex.Message + ")"); }
         o.Add("On / off per mod: see the Activity lines and the owner map (OURS files in the game = applied).");

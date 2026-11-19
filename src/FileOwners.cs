@@ -41,7 +41,7 @@ public sealed class FileOwners
     {
         _game = game;
         // the public pack app has no data folder: its mods are the installed packs, which OurFiles reads either way
-        _ours = SafeSet(() => Votg.OurFiles(dataRoot ?? AppSettings.Dir));
+        _ours = SafeSet(() => OurFilesReadOnly(dataRoot));
         _votg = SafeSet(() => Votg.BackupList(game) ?? new HashSet<string>());
         _receipt = SafeSet(() => (VotgReceipt.Files(game) ?? new List<string>()).Select(Norm).ToHashSet());
         _records = new(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +50,35 @@ public sealed class FileOwners
     }
 
     static string Norm(string p) => p.Replace('/', '\\').TrimStart('\\').ToLowerInvariant();
+
+    /// <summary>Installed packs, read only: Packs.List also finishes a journal and deletes hidden folders, a report
+    /// must never write (review 2026-11-19, LOW). Hidden ("." ) folders are skipped, not deleted.</summary>
+    public static List<(string Root, Edition Info)> PacksReadOnly()
+    {
+        var list = new List<(string, Edition)>();
+        if (!Directory.Exists(Packs.Dir)) return list;
+        foreach (var d in Directory.GetDirectories(Packs.Dir).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            if (Path.GetFileName(d).StartsWith('.')) continue;
+            try { list.Add((d, PackManifest.ReadInfo(d))); } catch (Exception) { }
+        }
+        return list;
+    }
+
+    /// <summary>Same set as Votg.OurFiles (loader chain + mods.json presets + pack presets), without Packs.List.</summary>
+    static HashSet<string> OurFilesReadOnly(string? dataRoot)
+    {
+        var set = Loader.Files.Select(f => Norm(f.Game)).ToHashSet();
+        void Take(ModCatalog cat)
+        {
+            foreach (var g in cat.Groups) foreach (var p in g.Presets) foreach (var s in p.Steps)
+                if (Votg.StepDest(s) is { } dest) set.Add(Norm(dest));
+        }
+        if (dataRoot != null) try { Take(ModCatalog.Load(DataRoot.CatalogPath(dataRoot))); } catch (Exception) { }
+        foreach (var (root, _) in PacksReadOnly())
+            try { Take(PackManifest.FromFolder(root, PackManifest.AppVersion).Catalog); } catch (Exception) { }
+        return set;
+    }
 
     static HashSet<string> SafeSet(Func<HashSet<string>> f)
     {
