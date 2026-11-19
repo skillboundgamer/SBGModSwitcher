@@ -211,7 +211,6 @@ public sealed class ModApplier
         return r;
     }
 
-    /// <summary>Would this preset write a wad / size table (the files the game maps at start)?</summary>
     /// <summary>False when Apply would skip this step (the file is already as the step wants it): the same tests as the
     /// step loop below, so a step that writes nothing is no VOTG clash. slot / kingvo are always checked there: true.</summary>
     bool WouldWrite(string[] s) => s[0] switch
@@ -223,6 +222,7 @@ public sealed class ModApplier
         _ => true,
     };
 
+    /// <summary>Would this preset write a wad / size table (the files the game maps at start)?</summary>
     public bool NeedsClosedGame(ModPreset p)
     {
         foreach (var s in p.Steps)

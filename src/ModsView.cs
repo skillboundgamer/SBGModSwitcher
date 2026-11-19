@@ -349,17 +349,13 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>True when a step of the preset writes a file under mod\ (only a mod loader reads those).</summary>
-    static bool InModFolder(ModPreset p) =>
-        p.Steps.Any(s => Votg.StepDest(s) is { } d && d.StartsWith(@"mod\", StringComparison.Ordinal));
-
     void UpdateActiveChips()
     {
         if (_catalog == null) return;
         ActiveChips.Children.Clear();
         // no mod loader at all (no MIO, no VOTG): nothing in mod\ is loaded, so those mods do not run (two file checks)
         var gameNow = _settings.GamePath;
-        bool noLoader = GameLocator.IsGameDir(gameNow) && !GameLocator.HasModLoader(gameNow!) && !Loader.VotgActive(gameNow!);
+        bool noLoader = LoaderUse.NoLoader(gameNow);
         int notRunning = 0;
         foreach (var g in _catalog.Groups)
         {
@@ -367,7 +363,7 @@ public partial class MainWindow
             bool waits = idx < 0 && _loaderWait.TryGetValue(g.Id, out var w) && (idx = w) >= 0;   // files in, loader out
             var what = idx < 0 ? "Custom" : g.Presets[idx].Label;
             bool usesLoader = idx >= 0 && g.Presets[idx].UsesLoader;
-            bool dead = noLoader && (idx >= 0 ? usesLoader || InModFolder(g.Presets[idx]) : g.Presets.Any(InModFolder));
+            bool dead = LoaderUse.NotRunning(noLoader, g, idx);
             if (dead) notRunning++;
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             sp.Children.Add(new TextBlock { Text = g.Name, VerticalAlignment = VerticalAlignment.Center });

@@ -26,6 +26,35 @@ public static class LoaderUse
         return (uses, waits);
     }
 
+    /// <summary>True when a step of the preset writes a file under mod\ (only a mod loader reads those).</summary>
+    static bool InModFolder(ModPreset p) =>
+        p.Steps.Any(s => Votg.StepDest(s) is { } d && d.StartsWith(@"mod\", StringComparison.Ordinal));
+
+    /// <summary>No mod loader at all: a real game folder with no MIO and no VOTG (three file checks).</summary>
+    public static bool NoLoader(string? game) =>
+        GameLocator.IsGameDir(game) && !GameLocator.HasModLoader(game!) && !Loader.VotgActive(game!);
+
+    /// <summary>The "not running" rule of the Overview chips: no loader, and the active preset (idx; idx &lt; 0 = any preset of the group)
+    /// uses the script loader or writes under mod\. A preset outside mod\ stays plain.</summary>
+    public static bool NotRunning(bool noLoader, ModGroup g, int idx) =>
+        noLoader && (idx >= 0 ? g.Presets[idx].UsesLoader || InModFolder(g.Presets[idx]) : g.Presets.Any(InModFolder));
+
+    /// <summary>Names of the active mods that do not run because there is no loader (tests: --loader uses, rows "notrunning").</summary>
+    public static List<string> NotRunningList(ModCatalog cat, string game, string data)
+    {
+        var res = new List<string>();
+        bool noLoader = NoLoader(game);
+        var m = new ModMatcher(game, data);
+        foreach (var g in cat.Groups)
+        {
+            int i = m.Check(g);
+            if (i < 0 && m.Check(g, true) is int w && w >= 0) i = w;   // files in: same as the chip's "waits" case
+            if (i == g.Vanilla || (i < 0 && !g.Presets.Any(InModFolder))) continue;
+            if (i >= 0 && NotRunning(noLoader, g, i)) res.Add(g.Name);
+        }
+        return res;
+    }
+
     /// <summary>Why Remove must wait (the loadout is On on disk: its plug-in needs the loader to give the player's own items
     /// back); null = it may go.</summary>
     public static string? RemoveBlock(string game) =>

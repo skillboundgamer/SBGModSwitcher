@@ -235,6 +235,7 @@ public partial class App : Application
                         o.WriteLine($"present\t{(Loader.Present(g) ? "true" : "false")}");
                         foreach (var n in lu.Uses) o.WriteLine("uses\t" + n);
                         foreach (var n in lu.Waits) o.WriteLine("waits\t" + n);
+                        foreach (var n in LoaderUse.NotRunningList(ModCatalog.Load(DataRoot.CatalogPath(ud), Edition.Load(ud)), g, ud)) o.WriteLine("notrunning\t" + n);
                         o.WriteLine("remove\t" + (LoaderUse.RemoveBlock(g) ?? "ok"));
                         return 0;
                     }
