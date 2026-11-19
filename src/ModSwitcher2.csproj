@@ -25,6 +25,16 @@
     <AssemblyName>SBGSwitcherDev</AssemblyName>
   </PropertyGroup>
 
+  <!-- Two public builds from one source (2026-11-19): `-p:SbgNexus=true` = the Nexus build. Nexus does not allow an exe
+       that sends or downloads, so that build defines SBG_NEXUS and does not even compile the update code (no HttpClient,
+       no Updater). Without it = the GitHub build with the Update button. The release check scans the built exe for network code. -->
+  <PropertyGroup Condition="'$(SbgNexus)' == 'true'">
+    <DefineConstants>$(DefineConstants);SBG_NEXUS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(SbgNexus)' == 'true'">
+    <Compile Remove="Updater.cs;UpdateHelper.cs;UpdateCli.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- The segments GC (clrgc.dll, part of .NET 8): a status check unpacks the 90 MB shore wad, and the default
          regions GC kept ~470 MB after it (8c release test); this one gives it back at once (23 MB after the check) -->

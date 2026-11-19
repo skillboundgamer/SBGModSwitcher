@@ -377,6 +377,20 @@ public partial class App : Application
                     foreach (var w in kv.Value) o.WriteLine($"{kv.Key}\t{w}");
                 return 0;
             }
+#if !SBG_NEXUS
+            case "--update-check":      // the update modes (UpdateCli.cs); the Nexus build has none of them
+            case "--update-prepare":
+            case "--update-apply":
+            case "--update-rollback":
+                return UpdateCli.Run(a, o);
+#endif
+            case "--build-kind":   // --build-kind : "github" (Update button) or "nexus" (no network code at all), tests
+#if SBG_NEXUS
+                o.WriteLine("nexus");
+#else
+                o.WriteLine("github");
+#endif
+                return 0;
             default:
                 Console.Error.WriteLine("unknown option " + a[0]);
                 return 2;

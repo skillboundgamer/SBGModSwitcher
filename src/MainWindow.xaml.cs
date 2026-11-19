@@ -128,6 +128,7 @@ public partial class MainWindow : Window
 
         BuildModCards();
         BuildSetupCard();
+        BuildUpdateCard();   // UpdateView.cs: the Settings card (GitHub build: the switch; Nexus build: text only)
         RebuildSearch();   // off the UI thread (SearchIndex.cs)
         GuideButton.Visibility = _packMode ? Visibility.Visible : Visibility.Collapsed;
         if (GuideDemoOut != null) { await RunGuideDemoAsync(); return; }   // hidden --guide-demo mode (GuideDemo.cs)
@@ -144,6 +145,7 @@ public partial class MainWindow : Window
             if (found != null) { _settings.GamePath = found; TrySave(); }
         }
         RefreshStatus();
+        StartUpdateCheck();   // UpdateView.cs: once, off the UI thread (GitHub build; the Nexus build does nothing)
         GuideRefresh();   // the search may have found the game after the guide was drawn
         await CheckGameAsync();
         _watch.Start();

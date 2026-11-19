@@ -73,7 +73,7 @@
       <!-- Top bar: search everything (Ctrl+K) + status chips -->
       <Border Grid.Row="0" Height="{StaticResource ThTopHeight}" BorderBrush="{StaticResource ThLine}" BorderThickness="0,0,0,1" Padding="22,0">
         <DockPanel LastChildFill="False">
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel x:Name="TopChips" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
             <Border x:Name="GameChip" Style="{StaticResource ThChip}" ToolTip="Is God of War Ragnarök running?">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Ellipse x:Name="GameDot" Width="7" Height="7" Fill="{StaticResource ThMuted}" VerticalAlignment="Center"/>

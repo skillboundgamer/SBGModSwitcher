@@ -32,3 +32,22 @@ jobs:
             out/SBGModSwitcher.exe
             out/clrgc.dll
           if-no-files-found: error
+
+      # The Nexus build: same source, SbgNexus=true leaves out all network code (no update check). Fresh obj/bin first,
+      # so nothing of the GitHub build is reused.
+      - name: Publish Nexus build
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force src/obj, src/bin -ErrorAction SilentlyContinue
+          dotnet publish src/ModSwitcher2.csproj -c Release -r win-x64 --self-contained true -o out-nexus `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
+            -p:ContinuousIntegrationBuild=true -p:Deterministic=true -p:SbgNexus=true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SBGModSwitcher-nexus-win-x64
+          path: |
+            out-nexus/SBGModSwitcher.exe
+            out-nexus/clrgc.dll
+          if-no-files-found: error
