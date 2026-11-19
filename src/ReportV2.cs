@@ -19,7 +19,7 @@ namespace ModSwitcher2;
 /// </summary>
 public static class ReportV2
 {
-    public const int Cap = 200_000;
+    public const int Cap = 200_000, LineCap = 300;
     const int ActivityTail = 40, MioTail = 60, LoaderTail = 40, CrashLines = 30;
     static readonly string[] FailWords = { "fail", "could not", "error", "not taken", "refused" };
     static readonly Regex MioNoise = new(@"^(VS|LUA): (loading|dumping) file ", RegexOptions.Compiled);
@@ -92,7 +92,11 @@ public static class ReportV2
             }
         }
 
-        var text = ReportText.Scrub(sb.ToString(), game, i.UserDir, i.UserName);
+        // one very long log line (a loader's list of every loaded wad) must not fill the report: cut each line at 300
+        // scrub first: a cut inside a path must never leave part of a user or folder name
+        var scrubbed = ReportText.Scrub(sb.ToString(), game, i.UserDir, i.UserName);
+        var text = string.Join(Environment.NewLine, scrubbed.Replace("\r", "").Split('\n')
+                                 .Select(l => l.Length > LineCap ? l[..LineCap] + " …" : l));
         if (text.Length > Cap) text = text[..Cap] + Environment.NewLine + "(report cut at 200 KB)" + Environment.NewLine;
         return text;
     }
