@@ -40,7 +40,8 @@ public sealed class FileOwners
     public FileOwners(string game, string? dataRoot)
     {
         _game = game;
-        _ours = SafeSet(() => dataRoot == null ? Loader.Files.Select(f => Norm(f.Game)).ToHashSet() : Votg.OurFiles(dataRoot));
+        // the public pack app has no data folder: its mods are the installed packs, which OurFiles reads either way
+        _ours = SafeSet(() => Votg.OurFiles(dataRoot ?? AppSettings.Dir));
         _votg = SafeSet(() => Votg.BackupList(game) ?? new HashSet<string>());
         _receipt = SafeSet(() => (VotgReceipt.Files(game) ?? new List<string>()).Select(Norm).ToHashSet());
         _records = new(StringComparer.OrdinalIgnoreCase);
@@ -136,10 +137,10 @@ public sealed class FileOwners
     public List<string> ChangedGameFiles(string? dataRoot)
     {
         var outp = new List<string>();
-        if (dataRoot == null) { outp.Add("(no data folder: backups not checked)"); return outp; }
         try
         {
-            var bdir = DataRoot.BackupDir(dataRoot);
+            // no data folder = the public pack app: its backups are in the release place (DataRoot.BackupDir of a release)
+            var bdir = dataRoot != null ? DataRoot.BackupDir(dataRoot) : Path.Combine(AppSettings.Dir, "originals", "game_files");
             if (!Directory.Exists(bdir)) { outp.Add("(this app has no backup of any game file: none changed by it)"); return outp; }
             foreach (var b in Directory.EnumerateFiles(bdir, "*", SearchOption.AllDirectories).Take(200))
             {

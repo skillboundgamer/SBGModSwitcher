@@ -83,8 +83,10 @@ public static class ReportV2
             var sl = ReadLines(Path.Combine(game!, "GOWR-Script-Loader.log"));
             if (sl.Count > 0)
             {
-                Section(sb, $"Script loader log (GOWR-Script-Loader.log, {sl.Count} lines), warnings, errors and SBG lines, last {LoaderTail}");
-                foreach (var l in sl.Where(l => !l.Contains("] [info] ") || l.Contains("[SBG]")).TakeLast(LoaderTail)) sb.AppendLine("  " + l);
+                Section(sb, $"Script loader log (GOWR-Script-Loader.log, {sl.Count} lines), warnings, errors and failed lines, last {LoaderTail}");
+                var bad = sl.Where(l => !l.Contains("] [info] ") || FailWords.Concat(new[] { "not loaded", "cannot" }).Any(w => l.Contains(w, StringComparison.OrdinalIgnoreCase))).TakeLast(LoaderTail).ToList();
+                if (bad.Count == 0) sb.AppendLine("  (none)");
+                foreach (var l in bad) sb.AppendLine("  " + l);
                 Section(sb, "Script loader log, last 15 lines");
                 foreach (var l in sl.TakeLast(15)) sb.AppendLine("  " + l);
             }
@@ -245,8 +247,8 @@ public static class ReportV2
                                                CultureInfo.InvariantCulture, DateTimeStyles.None, out var bt)
                         && Math.Abs((bt - when).TotalMinutes) <= 10;
             o.Add("");
-            o.Add($"Script loader crash report (GOWR-Script-Loader-Crash.log), newest: {(tline == "" ? "?" : tline.Trim())}");
-            o.Add(near ? "  same time as the dump" : "  NOT the same time as the dump (another crash or a first-chance report)");
+            o.Add("Script loader crash report (GOWR-Script-Loader-Crash.log), newest block, "
+                  + (near ? "same time as the dump:" : "NOT the same time as the dump (another crash or a first-chance report):"));
             foreach (var l in block.Skip(1).TakeWhile(l => !l.StartsWith("Registers:"))) o.Add("  " + l.Trim());
             int st = block.FindIndex(l => l.StartsWith("Stack:"));
             if (st >= 0) foreach (var l in block.Skip(st).TakeWhile(l => !l.StartsWith("Last ")).Take(20)) o.Add("  " + l.Trim());
