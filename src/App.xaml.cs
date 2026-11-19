@@ -272,6 +272,29 @@ public partial class App : Application
                 o.Write(ReportText.Build("9.9.9", act, mio, Opt("--game"), Opt("--user"), Opt("--name")));
                 return 0;
             }
+            case "--report-v2":
+            {
+                // --report-v2 --game DIR [--data DIR] [--activity FILE] [--user DIR] [--name N] : the v2 report text (ReportV2.cs; tests only)
+                var act = Opt("--activity") is { } af ? File.ReadAllText(af) : "";
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var text = ReportV2.Build(new ReportV2.Input("9.9.9", act, Opt("--game"), Opt("--data"), Opt("--user"), Opt("--name"), AppSettings.Load()));
+                o.Write(text);
+                Console.Error.WriteLine($"report-v2: {text.Length} chars in {sw.ElapsedMilliseconds} ms");
+                return 0;
+            }
+            case "--crash-dmp":
+            {
+                // --crash-dmp FILE [--game DIR] : the crash facts of one dump (CrashInfo.cs; tests only)
+                var g = Opt("--game");
+                var cr = CrashInfo.Read(Opt("--crash-dmp") ?? throw new ArgumentException("--crash-dmp FILE"), p => CrashInfo.TagModule(p, g, false));
+                o.WriteLine($"time\t{cr.Time:yyyy-MM-dd HH:mm:ss}");
+                o.WriteLine($"code\t0x{cr.Code:X8}");
+                o.WriteLine($"where\t{cr.Where}");
+                if (cr.AccessText != null) o.WriteLine("access\t" + cr.AccessText);
+                if (cr.Known != null) o.WriteLine("known\t" + cr.Known);
+                foreach (var (mo, tag, n) in cr.StackModules) o.WriteLine($"module\t{mo}\t{n}\t{tag}");
+                return 0;
+            }
             case "--version":   // --version : the app version as the bottom bar and the report show it (tests)
                 o.WriteLine(ModSwitcher2.MainWindow.AppVersionText());
                 return 0;
