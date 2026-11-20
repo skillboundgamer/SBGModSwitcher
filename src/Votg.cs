@@ -2,7 +2,7 @@ using System.IO;
 
 namespace ModSwitcher2;
 
-/// <summary>What the check found: Found = another mod loader's backup folder is there; Clash = files it saved that our mods also change.</summary>
+/// <summary>What the check found: Found = VOTG's receipt (mod\_votg_receipt.json) is there; Clash = files it saved that our mods also change.</summary>
 public sealed record VotgResult(bool Found, List<string> Clash, bool StubInPlace, VotgInfo? Info = null, bool HookInPlace = false)
 {
     public const string NoClashText = "VOTG found, no clash with our mods.";
@@ -25,7 +25,8 @@ public sealed record VotgResult(bool Found, List<string> Clash, bool StubInPlace
 /// Finds the VOTG mod loader and warns about files it shares with our mods (plan 2026-11-17, batch C). READ ONLY: it never
 /// moves, deletes or edits a file. VOTG's installer keeps the originals of the files it replaces in
 /// <c>mod\_votg_backup\&lt;date&gt;\...</c>; a file in that list that our presets or the loader chain also write is a clash.
-/// ASSUMPTION: only that backup folder tells that VOTG is installed (not the winmm.dll, MIO has no known hash).
+/// Only VOTG's receipt (<c>mod\_votg_receipt.json</c>) tells that VOTG is installed (2026-11-21): VOTG's uninstall keeps the
+/// backup folder, so that folder alone is a leftover (his VOTG launcher said "Not installed" beside it) and counts as no VOTG.
 /// ASSUMPTION: how a player uninstalls VOTG is not checked, so the text only says "use VOTG's own uninstall".
 /// </summary>
 public static class Votg
@@ -69,13 +70,13 @@ public static class Votg
     /// <summary>
     /// The files VOTG changed (lower case, relative to the game): every backup folder under <c>_votg_backup</c>
     /// (<c>&lt;date&gt;</c>, <c>gamedata\&lt;date&gt;</c>, <c>legacy\&lt;date&gt;</c>; <c>legacy2018</c> holds no game paths) plus the file list
-    /// of the receipt. null = VOTG leaves no sign.
+    /// of the receipt. null = VOTG is not installed (no receipt; a backup folder alone is a leftover of an uninstall).
     /// </summary>
     public static HashSet<string>? BackupList(string gameRoot)
     {
+        if (!VotgReceipt.Exists(gameRoot)) return null;
         var root = Path.Combine(gameRoot, BackupDir);
         var rec = VotgReceipt.Files(gameRoot);
-        if (!Directory.Exists(root) && rec == null) return null;
         var set = new HashSet<string>();
         // the receipt always lists VOTG's own Kratos script; our hook design leaves it alone, so it is no clash by itself
         if (rec != null) foreach (var f in rec) if (Norm(f) != Norm(KratosMain)) set.Add(Norm(f));
@@ -109,9 +110,9 @@ public static class Votg
     /// <summary>Reads files only. Runs off the UI thread, once per game folder.</summary>
     public static VotgResult Check(string gameRoot, string? dataRoot)
     {
+        if (!VotgReceipt.Exists(gameRoot)) return new(false, new(), false);   // no receipt = not installed, leftovers or not
         var backup = BackupList(gameRoot);
-        var info = VotgReceipt.Exists(gameRoot) ? VotgReceipt.Read(gameRoot) : null;
-        if (backup == null && info == null) return new(false, new(), false);
+        var info = VotgReceipt.Read(gameRoot);
         var ours = dataRoot == null ? new HashSet<string>(Loader.Files.Select(f => Norm(f.Game))) : OurFiles(dataRoot);
         var clash = (backup ?? new()).Where(ours.Contains).OrderBy(x => x, StringComparer.Ordinal).ToList();
         bool hook = File.Exists(Path.Combine(gameRoot, Loader.Files.First(f => f.Ours == "SBG hook").Game));
@@ -149,6 +150,9 @@ public static class Votg
         { log.Add("Repair: not done: " + ex.Message); }
         return log;
     }
+
+    /// <summary>True when VOTG's backup folder is there without its receipt: leftovers of an uninstall (bug report line).</summary>
+    public static bool Leftovers(string gameRoot) => !VotgReceipt.Exists(gameRoot) && Directory.Exists(Path.Combine(gameRoot, BackupDir));
 
     /// <summary>--votg --game D [--data D] [--appdata D] : "found / clash / stub / text" lines (tests).</summary>
     public static int Cli(string game, string? data, TextWriter o)

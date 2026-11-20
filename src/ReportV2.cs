@@ -161,6 +161,7 @@ public static class ReportV2
             o.Add("VOTG receipt: " + (!votg ? "no" : v == null ? "yes (could not read it)"
                 : $"yes, mod {(v.ModVersion == "" ? "?" : v.ModVersion)}, payload {Short(v.Payload)}, loader {Short(v.LoaderSha)}, tested with this Switcher: {(v.Tested ? "yes" : "no")}"));
             o.Add("VOTG backup folder (mod\\_votg_backup): " + (Directory.Exists(Path.Combine(game, Votg.BackupDir)) ? "yes" : "no"));
+            if (Votg.Leftovers(game)) o.Add("VOTG leftovers (backup folder, no receipt): VOTG counts as not installed");
             var sl = Path.Combine(game, "GOWR-Script-Loader.ini");
             o.Add("Script loader ini (GOWR-Script-Loader.ini): " + (File.Exists(sl) ? "yes" : "no"));
             var mine = Loader.Mine(game);

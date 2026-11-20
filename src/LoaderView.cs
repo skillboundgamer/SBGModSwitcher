@@ -96,6 +96,7 @@ public partial class MainWindow
             if (_loList != null) LoCheckLoader();
             _ = RefreshScriptLoaderAsync();
             _ = RefreshModsAsync();   // its mods now wait for the loader (Overview banner)
+            _votgScanned = null; _ = RefreshVotgAsync();   // the VOTG card is never stale after the loader changed
         }
     }
 }
