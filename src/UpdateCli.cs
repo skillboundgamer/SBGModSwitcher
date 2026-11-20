@@ -77,13 +77,20 @@ public static class UpdateCli
             o.WriteLine("error\t" + fail);
             code = 1;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // e.g. the staging folder is gone: nothing was changed, but the player still gets a message + a restart
+            fail = $"The update could not be installed ({ex.Message}). Nothing was changed.";
+            o.WriteLine("error\t" + fail);
+            code = 1;
+        }
         Note(fail == null ? $"Update installed ({files} files; the old ones are kept as .old)" : "Update failed: " + fail);
         if (gui && fail != null)
             MessageBox.Show(fail, "Mod Switcher update", MessageBoxButton.OK, MessageBoxImage.Warning);
         if (restart != null)
         {
-            var exe = Path.Combine(to, Path.GetFileName(restart));
-            if (!File.Exists(exe)) exe = Path.Combine(to, UpdateHelper.AppExe);
+            // always the updated exe, never a renamed old copy that Apply did not replace (review 2026-11-20)
+            var exe = Path.Combine(to, UpdateHelper.AppExe);
             try { Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = to })?.Dispose(); }
             catch (Exception ex) { if (gui) MessageBox.Show("Could not start the Mod Switcher again: " + ex.Message, "Mod Switcher update"); }
         }

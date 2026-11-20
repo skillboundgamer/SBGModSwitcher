@@ -46,7 +46,7 @@ public static class UpdateHelper
         }
         var dir = Path.Combine(staging, "new");
         try { Unpack(zip, dir); }
-        catch (InvalidDataException) { throw new UpdateError("The downloaded zip is broken. Nothing was changed."); }
+        catch (Exception ex) when (ex is InvalidDataException or IOException) { throw new UpdateError("The downloaded zip is broken. Nothing was changed."); }
         if (!File.Exists(Path.Combine(dir, AppExe))) throw new UpdateError($"The download holds no {AppExe}. Nothing was changed.");
         return dir;
     }
@@ -113,7 +113,7 @@ public static class UpdateHelper
         int failAfter = int.TryParse(Environment.GetEnvironmentVariable("SBG_UPDATE_FAIL_AFTER"), out var fa) ? fa : -1;
         var files = RelFiles(from);
         if (!files.Contains(AppExe, StringComparer.OrdinalIgnoreCase)) throw new UpdateError($"The new version holds no {AppExe}. Nothing was changed.");
-        var done = new List<(string Target, bool HadOld)>();
+        var done = new List<(string Target, bool HadOld, bool HadOlder)>();
         int copied = 0;
         try
         {
@@ -122,14 +122,19 @@ public static class UpdateHelper
                 var target = Path.Combine(to, rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 bool had = File.Exists(target);
+                // an .old of an earlier update stays safe as .older until this update has succeeded (review 2026-11-20)
+                bool older = had && File.Exists(target + ".old");
+                if (older) File.Move(target + ".old", target + ".older", true);
                 if (had) File.Move(target, target + ".old", true);
-                done.Add((target, had));
+                done.Add((target, had, older));
                 if (copied == failAfter) throw new IOException("copy error (test switch SBG_UPDATE_FAIL_AFTER)");
                 File.Copy(Path.Combine(from, rel), target, false);
                 copied++;
                 log?.Invoke("copied\t" + rel);
             }
             File.WriteAllLines(Path.Combine(to, ListName), done.Where(d => d.HadOld).Select(d => Path.GetRelativePath(to, d.Target)));
+            foreach (var d in done.Where(d => d.HadOlder))
+                try { File.Delete(d.Target + ".older"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             return copied;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -143,16 +148,17 @@ public static class UpdateHelper
     }
 
     /// <summary>Put each old file back (newest first). -> the files that could not be put back.</summary>
-    static List<string> Undo(List<(string Target, bool HadOld)> done)
+    static List<string> Undo(List<(string Target, bool HadOld, bool HadOlder)> done)
     {
         var left = new List<string>();
         for (int i = done.Count - 1; i >= 0; i--)
         {
-            var (t, had) = done[i];
+            var (t, had, older) = done[i];
             try
             {
                 if (File.Exists(t)) File.Delete(t);
                 if (had) File.Move(t + ".old", t);
+                if (older) File.Move(t + ".older", t + ".old", true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { left.Add(t); }
         }
