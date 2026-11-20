@@ -32,6 +32,7 @@ public partial class MainWindow
 {
     public static string? PlayerCheckOut, PlayerCheckSteps;
     public static List<string>? PlayerCheckToasts;
+    readonly List<string> PlayerCheckNotes = new();   // a wait that ran out: written into the report, never silent
 
     async Task RunPlayerCheckAsync()
     {
@@ -67,6 +68,7 @@ public partial class MainWindow
                 await PcSettle();
                 if (step.StartsWith("update on"))   // wait for the check to end (a closed port: a few ms)
                     for (int i = 0; i < 200 && _updStatus.Text == "Checking..."; i++) await Task.Delay(100);
+                if (_updStatus.Text == "Checking...") o.Add("timeout\tthe update check did not end in 20 s");
                 await PcSettle();
                 PcReport(o, $"{n} {step}", game);
             }
@@ -80,6 +82,7 @@ public partial class MainWindow
     {
         await Idle();
         for (int i = 0; i < 100 && (_modChecking || _votgBusy); i++) await Task.Delay(100);
+        if (_modChecking || _votgBusy) PlayerCheckNotes.Add("timeout\tthe mod / VOTG check did not end in 10 s");
         await Task.Delay(250);
         await Idle();
     }
@@ -87,6 +90,8 @@ public partial class MainWindow
     void PcReport(List<string> o, string tag, string game)
     {
         o.Add($"== {tag}");
+        o.AddRange(PlayerCheckNotes);
+        PlayerCheckNotes.Clear();
         o.Add("packmode\t" + (_packMode ? "true" : "false"));
         o.Add("dataroot\t" + (_dataRoot ?? "-"));
         o.Add("toast\t" + string.Join(" || ", PlayerCheckToasts!));
