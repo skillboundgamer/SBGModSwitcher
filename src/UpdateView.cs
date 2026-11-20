@@ -72,7 +72,12 @@ public partial class MainWindow
     void StartUpdateCheck()
     {
         if (!_settings.CheckUpdates) return;
-        if (_updChecked) { _updStatus.Text = _updLast ?? "Checking..."; return; }   // once per start; the switch back on shows the result again
+        if (_updChecked)   // once per start; the switch back on shows the result (and its button) again
+        {
+            _updStatus.Text = _updLast ?? "Checking...";
+            if (_update is { } u) ShowUpdateButton(u);
+            return;
+        }
         if (_edition != null && !_packMode) { _updStatus.Text = "This edition is updated with its own download."; return; }
         _updChecked = true;
         _updStatus.Text = "Checking...";
@@ -88,7 +93,7 @@ public partial class MainWindow
             _update = r;
             if (r == null) { SetUpdStatus($"Up to date (v{Updater.Current})."); return; }
             SetUpdStatus($"Version {r.Version} is out (you have {Updater.Current}). Use the Update button at the top.");
-            ShowUpdateButton(r);
+            if (_settings.CheckUpdates) ShowUpdateButton(r);   // turned off while the check ran: the button waits for the switch
         }
         catch (UpdateError ex) { SetUpdStatus(ex.Message); }
         catch (Exception) { SetUpdStatus("The update check did not work this time."); }
