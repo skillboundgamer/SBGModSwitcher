@@ -105,6 +105,9 @@ public partial class MainWindow
 
     void ShowToast(string text, string tone)
     {
+#if SBG_DEV
+        PlayerCheckToasts?.Add(text);   // --player-check collects every toast (PlayerCheck.cs)
+#endif
         ToastText.Text = text;
         ToastText.Foreground = Brush(tone);
         ToastIcon.Stroke = Brush(tone);

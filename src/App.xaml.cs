@@ -19,6 +19,9 @@ public partial class App : Application
         if (a.Length > 2 && a[0] == "--perf") { StartPerf(a[1], a[2]); return; }   // hidden timing mode (Perf.cs)
         if (a.Length > 2 && a[0] == "--guide-demo") { StartGuideDemo(a[1], a[2]); return; }   // hidden guide screenshots (GuideDemo.cs)
         if (a.Length > 3 && a[0] == "--pack-demo") { StartPackDemo(a[1], a[2], a[3]); return; }   // hidden demo mode (PacksDemo.cs)
+#if SBG_DEV
+        if (a.Length > 3 && a[0] == "--player-check") { StartPlayerCheck(a[1], a[2], a[3]); return; }   // hidden player-app test mode (PlayerCheck.cs)
+#endif
         if (a.Length > 0 && a[0].StartsWith("--"))
         {
             int code;

@@ -132,11 +132,17 @@ public partial class MainWindow : Window
         RebuildSearch();   // off the UI thread (SearchIndex.cs)
         GuideButton.Visibility = _packMode ? Visibility.Visible : Visibility.Collapsed;
         if (GuideDemoOut != null) { await RunGuideDemoAsync(); return; }   // hidden --guide-demo mode (GuideDemo.cs)
-        bool demo = PerfOut != null || PackDemoOut != null;   // the timing / demo modes take their own screenshots
+        bool demo = PerfOut != null || PackDemoOut != null;
+#if SBG_DEV
+        demo |= PlayerCheckOut != null;
+#endif   // the timing / demo modes take their own screenshots
         if (_packMode && !_settings.GuideDone && !demo) ShowGuide();   // the guide holds the disclaimer as its step 3
         else if (_settings.DisclaimerAccepted < DisclaimerVersion) ShowDisclaimer();
         if (PerfOut != null) { await RunPerfAsync(); return; }   // hidden --perf timing mode (Perf.cs)
         if (PackDemoOut != null) { await RunPackDemoAsync(); return; }   // hidden --pack-demo mode (PacksDemo.cs)
+#if SBG_DEV
+        if (PlayerCheckOut != null) { await RunPlayerCheckAsync(); return; }   // hidden --player-check mode (PlayerCheck.cs)
+#endif
 
         // Path detection reads the registry and Steam's library list: off the UI thread.
         if (!GameLocator.IsGameDir(_settings.GamePath))
