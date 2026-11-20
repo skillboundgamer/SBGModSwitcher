@@ -217,9 +217,14 @@ public partial class MainWindow
     /// <summary>"Turn loader on": one row of the Apply list (nothing is written before Apply).</summary>
     bool StageLoaderOn()
     {
-        if (!GameLocator.IsGameDir(_settings.GamePath) || _dataRoot == null) return false;
+        if (!GameLocator.IsGameDir(_settings.GamePath)) { ShowToast("Set the game folder first", "Warn"); return false; }
+        // the player app has no data root when no pack has a loadout (2.0.5 test, 2026-11-21: the click did nothing):
+        // then a pack that waits for the loader gives the root; the loader files come from the exe when the pack has none
+        var data = _dataRoot ?? _catalog?.Groups.FirstOrDefault(g => _loaderWait.ContainsKey(g.Id) && g.Root.Length > 0)?.Root
+                             ?? _packs.FirstOrDefault()?.Root;
+        if (data == null) { ShowToast("No mod needs the script loader yet.", "Warn"); return false; }
         if (_ldr?.Problem is { } why) { ShowToast(why, "Warn"); return false; }
-        string game = _settings.GamePath!, data = _dataRoot;
+        string game = _settings.GamePath!;
         _extra.Remove("loader");
         var names = WaitingNames().ToList();
         _extra["loaderon"] = new ExtraEdit("overview", "IcPlug", "Script loader",
