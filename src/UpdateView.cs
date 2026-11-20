@@ -42,6 +42,7 @@ public partial class MainWindow
     Button? _updButton;
     ReleaseInfo? _update;
     bool _updChecked, _updBusy;
+    string? _updLast;   // the last check's status text: shown again when the switch goes off and on
 
     void BuildUpdateCard()
     {
@@ -70,7 +71,8 @@ public partial class MainWindow
     /// <summary>Once per start (and when the switch is turned on): the check runs off the UI thread; only its result touches the UI.</summary>
     void StartUpdateCheck()
     {
-        if (_updChecked || !_settings.CheckUpdates) return;
+        if (!_settings.CheckUpdates) return;
+        if (_updChecked) { _updStatus.Text = _updLast ?? "Checking..."; return; }   // once per start; the switch back on shows the result again
         if (_edition != null && !_packMode) { _updStatus.Text = "This edition is updated with its own download."; return; }
         _updChecked = true;
         _updStatus.Text = "Checking...";
@@ -84,12 +86,19 @@ public partial class MainWindow
             var cur = Updater.Current;
             var r = await Task.Run(async () => { UpdateHelper.CleanTemp(); return await Updater.CheckAsync(cur); });
             _update = r;
-            if (r == null) { _updStatus.Text = $"Up to date (v{Updater.Current})."; return; }
-            _updStatus.Text = $"Version {r.Version} is out (you have {Updater.Current}). Use the Update button at the top.";
+            if (r == null) { SetUpdStatus($"Up to date (v{Updater.Current})."); return; }
+            SetUpdStatus($"Version {r.Version} is out (you have {Updater.Current}). Use the Update button at the top.");
             ShowUpdateButton(r);
         }
-        catch (UpdateError ex) { _updStatus.Text = ex.Message; }
-        catch (Exception) { _updStatus.Text = "The update check did not work this time."; }
+        catch (UpdateError ex) { SetUpdStatus(ex.Message); }
+        catch (Exception) { SetUpdStatus("The update check did not work this time."); }
+    }
+
+    /// <summary>Keeps the result and shows it, unless the switch was turned off while the check ran.</summary>
+    void SetUpdStatus(string text)
+    {
+        _updLast = text;
+        if (_settings.CheckUpdates) _updStatus.Text = text;
     }
 
     void ShowUpdateButton(ReleaseInfo r)
