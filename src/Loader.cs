@@ -52,9 +52,14 @@ public static partial class Loader
 
     /// <summary>True when the VOTG launcher's receipt is in the game (read only; VOTG owns Kratos' main.lua then).</summary>
     public static bool VotgActive(string gameRoot) => File.Exists(Path.Combine(gameRoot, VotgReceiptRel));
+    /// <summary>VOTG with a receipt, or a VOTG install that left no receipt: its backup folder and its loader dll are both
+    /// there (2.0.5 review, 2026-11-21: without this, our stub went over VOTG's main.lua and turn off did not put it back).
+    /// ASSUMPTION: an uninstalled VOTG leaves no winmm.dll, so a leftover backup folder alone does not count.</summary>
+    public static bool VotgThere(string gameRoot) => VotgActive(gameRoot)
+        || (Directory.Exists(Path.Combine(gameRoot, Votg.BackupDir)) && File.Exists(Path.Combine(gameRoot, "winmm.dll")));
     static string NoStubMarker => Path.Combine(Dir, "nostub");
     /// <summary>True when the old Kratos stub is part of the chain: MIO without VOTG, and the player did not turn it off (test T1).</summary>
-    public static bool StubWanted(string gameRoot) => !VotgActive(gameRoot) && !File.Exists(NoStubMarker);
+    public static bool StubWanted(string gameRoot) => !VotgThere(gameRoot) && !File.Exists(NoStubMarker);
     public static void SetStub(bool on)
     {
         Directory.CreateDirectory(Dir);
@@ -286,7 +291,7 @@ public static partial class Loader
     /// names) is put back only while VOTG is installed: alone it fails at line 1244 (no VOTG config) and the game closes (T1 run 1, 2026-11-18).</summary>
     static bool CanRestore(string gameRoot, LoaderRecord r, string bak, List<string> log)
     {
-        if (!r.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase) || VotgActive(gameRoot)) return true;
+        if (!r.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase) || VotgThere(gameRoot)) return true;
         if (File.ReadAllBytes(bak).AsSpan().IndexOf("VOTG_"u8) < 0) return true;   // not VOTG's: restore as before
         log.Add($"{r.Game}: the saved earlier file belongs to VOTG, which is not installed: not put back (kept in {bak})");
         return false;
