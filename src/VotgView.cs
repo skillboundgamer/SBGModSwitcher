@@ -55,7 +55,7 @@ public partial class MainWindow
         OvTone(VotgIco, VotgIcon, !found ? "ThAccent" : r!.Clash.Count > 0 || r.Info is { Tested: false } ? "ThWarn" : "ThOk");
         VotgBanner.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
         if (text == null) return;
-        VotgText.Text = text;      // one line; a long text ends in "…" and shows whole in the tooltip
+        VotgText.Text = text;      // wraps: the whole text shows (2.0.5 test: a cut "…" hid the button name it asks for)
         VotgText.ToolTip = text;
         VotgOff.Visibility = canTurnOff ? Visibility.Visible : Visibility.Collapsed;
     }

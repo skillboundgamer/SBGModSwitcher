@@ -415,5 +415,12 @@ public partial class MainWindow
         }
     }
 
-    void Refresh_Click(object sender, RoutedEventArgs e) => _ = RefreshModsAsync();
+    /// <summary>Overview "Refresh": mods, the script loader card and VOTG again (2.0.5 test: VOTG installed while the app was
+    /// open showed only after a restart). All three read files off the UI thread.</summary>
+    void Refresh_Click(object sender, RoutedEventArgs e)
+    {
+        _ = RefreshModsAsync();
+        _ = RefreshScriptLoaderAsync();
+        _votgScanned = null; _ = RefreshVotgAsync();
+    }
 }

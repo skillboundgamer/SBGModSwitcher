@@ -240,7 +240,7 @@
                     <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
                   </Path>
                   <Button x:Name="NeedAction" DockPanel.Dock="Right" Style="{StaticResource ThBtnSm}" Content="Turn loader on" Click="TurnLoaderOn_Click"/>
-                  <TextBlock x:Name="NeedText" VerticalAlignment="Center" Foreground="{StaticResource ThText}" FontSize="13.5" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock x:Name="NeedText" VerticalAlignment="Center" Foreground="{StaticResource ThText}" FontSize="13.5" TextWrapping="Wrap"/>
                 </DockPanel>
               </Border>
               <Border x:Name="VotgBanner" Style="{StaticResource ThBanner}" Visibility="Collapsed">
@@ -252,7 +252,7 @@
                           ToolTip="Versions, game folder, loader, VOTG, active mods and the last activity lines, ready to paste"/>
                   <Button x:Name="VotgOff" DockPanel.Dock="Right" Style="{StaticResource ThBtnSm}" Content="Turn off our Kratos hook" Visibility="Collapsed"
                           Click="VotgOff_Click" ToolTip="Takes our hook files out; VOTG keeps every byte"/>
-                  <TextBlock x:Name="VotgText" VerticalAlignment="Center" Foreground="{StaticResource ThText}" FontSize="13.5" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock x:Name="VotgText" VerticalAlignment="Center" Foreground="{StaticResource ThText}" FontSize="13.5" TextWrapping="Wrap"/>
                 </DockPanel>
               </Border>
             </StackPanel>
