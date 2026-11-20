@@ -38,7 +38,7 @@ public partial class MainWindow
             var (r, repair, mine) = res;
             _votgScanned = game;
             foreach (var l in repair) Log(l, "Warn");
-            ShowVotg(r, r.Text(), r.Found && mine);   // VOTG found (receipt or not) and our hook is in: the player can turn ours off
+            ShowVotg(r, r.Text(), r.Info != null && mine);
         }
         catch (Exception ex) { Log("VOTG check failed: " + ex.Message, "Warn"); }
         finally { _votgBusy = false; }
