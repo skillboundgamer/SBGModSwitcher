@@ -152,8 +152,10 @@ public static partial class Loader
     public static bool Present(string gameRoot)
     {
         bool Has(LoaderFile f) => File.Exists(Path.Combine(gameRoot, f.Game));
-        // Kratos' script starts the probe by the stub (MIO) or by the hook (VOTG, or MIO with the stub off): one of them is enough
-        return Has(Tail) && Has(Live) && (Has(Stub) || Has(Hook));
+        // Kratos' script starts the probe by the stub (MIO) or by the hook (VOTG, or MIO with the stub off): one of them is enough.
+        // With VOTG the Kratos main.lua is VOTG's own and never starts our probe: only our hook counts (2.0.5 test, 2026-11-21:
+        // the card said "In place" with the hook missing, and Turn loader on was hidden).
+        return Has(Tail) && Has(Live) && (Has(Hook) || (!VotgActive(gameRoot) && Has(Stub)));
     }
 
     /// <summary>True when every chain file is in the game with our exact bytes and no old stub of ours waits to be taken out: Install would write nothing.</summary>
