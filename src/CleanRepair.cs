@@ -46,7 +46,8 @@ public static partial class CleanState
 
         foreach (var it in r.Foreign)
         {
-            if (it.Fix != "restore") { log.Add($"skipped\t{it.Path}\t" + (it.Kind == "leftovers" ? "VOTG's backups are never removed" : "nothing to repair")); continue; }
+            if (it.Fix == "none") continue;   // info only (VOTG's leftover backups): never touched, not a repair line
+            if (it.Fix != "restore") { log.Add($"skipped\t{it.Path}\tnothing to repair"); continue; }
             bool votg = it.Kind == "votg";
             // a file found only now (not in the list the player saw) is never covered by that Yes
             if (!(votg ? yesVotg : yesForeign) || (asked != null && !asked.Contains(it.Path)))

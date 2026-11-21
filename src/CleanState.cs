@@ -21,7 +21,9 @@ public sealed record CleanVotg(bool Receipt, bool Leftovers, string Winmm, [prop
 /// <summary>What the clean-state check found (--clean-check prints it as JSON).</summary>
 public sealed record CleanReport(string Version, List<CleanItem> Stale, List<CleanItem> Foreign, CleanVotg Votg, List<string> Hints)
 {
-    [JsonIgnore] public bool IsClean => Stale.Count == 0 && Foreign.Count == 0;
+    /// <summary>Items Repair can act on. An info-only item (Fix none, e.g. VOTG's leftover backups) is not a problem to repair.</summary>
+    [JsonIgnore] public int Actionable => Stale.Count + Foreign.Count(i => i.Fix != "none");
+    [JsonIgnore] public bool IsClean => Actionable == 0;
 }
 
 /// <summary>

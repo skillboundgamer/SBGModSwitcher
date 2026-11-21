@@ -283,7 +283,8 @@ public partial class MainWindow
         if (!show) return;
         var parts = new List<string>();
         if (rep.Stale.Count > 0) parts.Add($"{rep.Stale.Count} old file{(rep.Stale.Count == 1 ? "" : "s")} of this app");
-        if (rep.Foreign.Count > 0) parts.Add($"{rep.Foreign.Count} file{(rep.Foreign.Count == 1 ? "" : "s")} from another tool");
+        int other = rep.Foreign.Count(i => i.Fix != "none");
+        if (other > 0) parts.Add($"{other} file{(other == 1 ? "" : "s")} from another tool");
         var text = "Found " + string.Join(" and ", parts) + " in the game folder." + (rep.Hints.Count > 0 ? " " + rep.Hints[0] : "");
         CleanText.Text = text;
         CleanText.ToolTip = string.Join("\n", rep.Stale.Concat(rep.Foreign).Select(i => i.Path + ": " + i.Why).Concat(rep.Hints));
