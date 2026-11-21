@@ -56,6 +56,47 @@ public static partial class Loader
     /// <summary>Every file the chain may write (any mode): lists for clash checks and packs.</summary>
     public static readonly LoaderFile[] Files = { Stub, Hook, Tail, Live };
 
+    /// <summary>Every version of a chain file a Switcher has shipped (the clean-state check, CleanState.cs): sha256 of the text
+    /// with its line ends made LF, because a Windows build embeds CRLF copies and a release zip ships LF ones. Taken from the git
+    /// history of each source file on 2026-11-21 (the source of the loader files, newest first). A file with one of these
+    /// hashes is ours, whatever version. A new version of a chain file adds its hash at the top here.</summary>
+    internal static readonly Dictionary<string, string[]> ShippedLf = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [Stub.Game] = new[] { "6506528c40296dbcd312cb1c3729a3151e3dd0dc30bcf760235dc70d261d7bbc" },   // probe stub v2.0 (only one)
+        [Hook.Game] = new[] { "09ac681487bb924eb4992a8dfba8e40d9716752afc9feed7004d33f39d296840" },   // core.color hook v1 (only one)
+        [Tail.Game] = new[]
+        {
+            "03f71d94ccd2d69e6a41fa59e6c1bed2d099ba00a16cd236430e03003314cf03",   // probe tail v1.15, 2026-11-19
+            "4a5c0b5aa15c58941a2c00886d3d145ad16adc2b97259fd68ee7dc60738f26ce",   // 2026-10-21 (second)
+            "3218ddd89760457a1e938cbd9770a51d638ec697b59c357bbc516a6478e0997e",   // 2026-10-21 (first, the 2.0.0 loader)
+        },
+        [Live.Game] = new[]
+        {
+            "85482088849012265e01c06fc4d4a20aaf4309320d9edf1263b1283492ad3b7b",   // public live.lua, 2026-11-17
+            "f73b433e3debf781b47ab6b7e9912167a58855483ab0aa73ed9b0cc11357b5ac",   // 2026-11-11 (v2: twogna)
+            "276efaa57eab6843647175dc9aa59e1f92c12fde33ffb7a309361c16b1a4a78a",   // 2026-10-21 (third)
+            "bbab8cecb35820b50cf120c00edaba3960d8a41336383823e1d6828d10937904",   // 2026-10-21 (second)
+            "50e2283d660b14969be99c6ee266dfe2ab910bda5f10bae5077ea63e00ca43fe",   // 2026-10-21 (first, the 2.0.0 loader)
+        },
+    };
+
+    /// <summary>sha256 of a text file with every CR taken out (see <see cref="ShippedLf"/>).</summary>
+    internal static string LfSha(byte[] b) => Sha(b.Where(x => x != (byte)'\r').ToArray());
+
+    /// <summary>True when the bytes are a version of this chain file that a Switcher shipped.</summary>
+    internal static bool Shipped(LoaderFile f, byte[] have) =>
+        ShippedLf.TryGetValue(f.Game, out var list) && list.Contains(LfSha(have));
+
+    /// <summary>The full path of a record's saved earlier file; null = none.</summary>
+    internal static string? RecordBackupPath(LoaderRecord r) => r.Backup == null ? null : Path.Combine(Dir, r.Backup);
+
+    /// <summary>Drops this app's records of one game file in this game folder (the file was taken out by the clean-state repair).</summary>
+    internal static void ForgetRecord(string gameRoot, string game)
+    {
+        var recs = Records(); var root = RootKey(gameRoot);
+        if (recs.RemoveAll(r => r.Root == root && r.Game.Equals(game, StringComparison.OrdinalIgnoreCase)) > 0) SaveRecords(recs);
+    }
+
     /// <summary>True when the VOTG launcher's receipt is in the game (read only; VOTG owns Kratos' main.lua then).</summary>
     public static bool VotgActive(string gameRoot) => File.Exists(Path.Combine(gameRoot, VotgReceiptRel));
     static string NoStubMarker => Path.Combine(Dir, "nostub");
@@ -149,7 +190,7 @@ public static partial class Loader
     /// <summary>The game folder as records hold it: full path, no trailing slash, lower case (Windows paths ignore case).</summary>
     public static string RootKey(string gameRoot) => Path.GetFullPath(gameRoot).TrimEnd('\\', '/').ToLowerInvariant();
 
-    static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
+    internal static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     /// <summary>The files this app put into this game folder (what "Remove loader" takes out).</summary>
     public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot) && !r.Retired).ToList();
@@ -299,7 +340,7 @@ public static partial class Loader
 
     /// <summary>True when a saved earlier file may be put back. A saved Kratos script that is VOTG's own (it holds VOTG's own function
     /// names) is put back only while VOTG is installed: alone it fails at line 1244 (no VOTG config) and the game closes (T1 run 1, 2026-11-18).</summary>
-    static bool CanRestore(string gameRoot, LoaderRecord r, string bak, List<string> log)
+    internal static bool CanRestore(string gameRoot, LoaderRecord r, string bak, List<string> log)
     {
         if (!r.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase) || VotgActive(gameRoot)) return true;
         if (File.ReadAllBytes(bak).AsSpan().IndexOf("VOTG_"u8) < 0) return true;   // not VOTG's: restore as before

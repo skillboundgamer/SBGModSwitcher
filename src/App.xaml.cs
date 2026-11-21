@@ -66,6 +66,11 @@ public partial class App : Application
         {
             case "--votg":   // --votg --game D [--data D] : the VOTG check (Votg.cs; tests)
                 return Votg.Cli(Opt("--game") ?? throw new ArgumentException("--votg needs --game <folder>"), Opt("--data"), o);
+            case "--clean-check":   // --clean-check --game D [--data D] [--appdata D] : the clean-state check as JSON (CleanState.cs; tests)
+                return CleanState.CliCheck(Opt("--game") ?? throw new ArgumentException("--clean-check needs --game <folder>"), Opt("--data") ?? DataRoot.Find(), o);
+            case "--repair":   // --repair --game D [--data D] [--appdata D] [--yes-votg] [--yes-foreign] : exit 3 = the game runs (nothing written)
+                return CleanState.CliRepair(Opt("--game") ?? throw new ArgumentException("--repair needs --game <folder>"), Opt("--data") ?? DataRoot.Find(),
+                                            a.Contains("--yes-votg"), a.Contains("--yes-foreign"), o);
             case "--search":   // --search QUERY [--data D] [--game D] : the top search box's hits (SearchIndex.cs; tests), UTF-8
             {
                 using var u8 = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
