@@ -27,10 +27,12 @@ public sealed class AppSettings
     /// <summary>The app version that last ran: a new version runs the clean-state check once (OverviewView.cs).</summary>
     public string? LastSeenVersion { get; set; }
 
-    public static string Dir => DirOverride ??
+    /// <summary>Test only: SBG_APPDATA=D moves the settings, backups and records of a normal window to a sandbox folder.</summary>
+    public static string Dir => DirOverride ?? EnvDir() ??
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SBGModSwitcher");
     /// <summary>Headless tests only (--appdata D): a sandbox instead of the real settings folder.</summary>
     public static string? DirOverride { get; set; }
+    static string? EnvDir() => Environment.GetEnvironmentVariable("SBG_APPDATA") is { Length: > 0 } d ? d : null;
     static string FilePath => Path.Combine(Dir, "settings.json");
 
     public static AppSettings Load()
