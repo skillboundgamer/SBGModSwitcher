@@ -284,8 +284,8 @@ public static class CleanState
                 bool there = File.Exists(g);
                 if (steps.Owned(rel))
                     stale.Add(new(rel, there ? "Changed: the file is neither one of our mods nor our backup of the original." : "Missing: our backup has the original.", "restore") { Kind = "exec", Source = b });
-                else
-                    foreign.Add(new(rel, there ? "Changed by another mod or tool (no mod of ours writes it); our backup has the original." : "Missing: our backup has the original (no mod of ours writes it).", "restore") { Kind = "foreign", Source = b });
+                else if (there)   // a missing file no mod of ours writes is never created: the player or a tool removed it, or the backup entry is junk
+                    foreign.Add(new(rel, "Changed by another mod or tool (no mod of ours writes it); our backup has the original.", "restore") { Kind = "foreign", Source = b });
             }
     }
 
