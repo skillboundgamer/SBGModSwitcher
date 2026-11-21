@@ -245,17 +245,18 @@ public partial class MainWindow
     {
         var ver = AppVersionText();
         if (_settings.LastSeenVersion == ver || !GameLocator.IsGameDir(_settings.GamePath)) return;
-        await RunCleanCheckAsync(false);
+        if (!await RunCleanCheckAsync(false)) return;   // failed or busy: ask again at the next start
         _settings.LastSeenVersion = ver;
         TrySave();
     }
 
     async void CleanCheck_Click(object sender, RoutedEventArgs e) => await RunCleanCheckAsync(true);
 
-    async Task RunCleanCheckAsync(bool byPlayer, string? after = null)
+    /// <summary>true = the check ran and its report is shown.</summary>
+    async Task<bool> RunCleanCheckAsync(bool byPlayer, string? after = null)
     {
         var game = _settings.GamePath;
-        if (_cleanBusy || !GameLocator.IsGameDir(game)) return;
+        if (_cleanBusy || !GameLocator.IsGameDir(game)) return false;
         _cleanBusy = true;
         CleanCheck.IsEnabled = CleanRepair.IsEnabled = false;
         try
@@ -266,8 +267,9 @@ public partial class MainWindow
             ShowClean(rep, after);
             ShowVotg(_votgRes, _votgTxt, _votgOffOk);   // the leftovers line of the VOTG row
             if (byPlayer && rep.IsClean) ShowToast("Nothing to repair. All files are right.", "Ok");
+            return true;
         }
-        catch (Exception ex) { Log("Clean check failed: " + ex.Message, "Warn"); }
+        catch (Exception ex) { Log("Clean check failed: " + ex.Message, "Warn"); return false; }
         finally { _cleanBusy = false; CleanCheck.IsEnabled = CleanRepair.IsEnabled = true; }
     }
 
@@ -304,11 +306,12 @@ public partial class MainWindow
         _cleanBusy = true;
         CleanCheck.IsEnabled = CleanRepair.IsEnabled = false;
         string? data = _dataRoot;
+        var askedPaths = ask.Select(i => i.Path).ToHashSet();   // the Yes covers only the files the player saw
         List<string> lines;
         try
         {
             await _io.WaitAsync();   // Repair writes: never while a preset is being written
-            try { lines = await Task.Run(() => CleanState.Repair(game!, data, yes, yes)); }
+            try { lines = await Task.Run(() => CleanState.Repair(game!, data, yes, yes, null, askedPaths)); }
             finally { _io.Release(); }
         }
         catch (Exception ex) { Log("Repair failed: " + ex.Message, "Bad"); _cleanBusy = false; CleanCheck.IsEnabled = CleanRepair.IsEnabled = true; return; }

@@ -14,7 +14,7 @@ public static partial class CleanState
     /// "skipped\tpath\twhy". A running game = writes nothing, one line <see cref="RefusedLine"/>. Off the UI thread.
     /// gameRunning: tests may pass their own; default = any GoWR process.
     /// </summary>
-    public static List<string> Repair(string game, string? data, bool yesVotg, bool yesForeign, Func<bool>? gameRunning = null)
+    public static List<string> Repair(string game, string? data, bool yesVotg, bool yesForeign, Func<bool>? gameRunning = null, ISet<string>? asked = null)
     {
         var running = gameRunning ?? (() => Loader.GameRunning() || GameLocator.IsGameRunningIn(game));
         if (running()) return new() { RefusedLine };
@@ -36,13 +36,20 @@ public static partial class CleanState
             if (it.Fix == "update") { updates.Add(it); continue; }
             Do(it, () => it.Fix == "remove" ? TakeOut(game, it, recycle) : PutBack(game, it, recycle));
         }
-        if (updates.Count > 0) Update(game, data, updates, log, running);
+        if (updates.Count > 0)
+        {
+            Update(game, data, updates, log, running);
+            // the loader install writes the whole chain again: a file logged as removed may be back (its hook)
+            for (int i = 0; i < log.Count; i++)
+                if (log[i].StartsWith("removed\t") && File.Exists(Wall(game, log[i][8..]))) log[i] = "restored\t" + log[i][8..];
+        }
 
         foreach (var it in r.Foreign)
         {
             if (it.Fix != "restore") { log.Add($"skipped\t{it.Path}\t" + (it.Kind == "leftovers" ? "VOTG's backups are never removed" : "nothing to repair")); continue; }
             bool votg = it.Kind == "votg";
-            if (!(votg ? yesVotg : yesForeign))
+            // a file found only now (not in the list the player saw) is never covered by that Yes
+            if (!(votg ? yesVotg : yesForeign) || (asked != null && !asked.Contains(it.Path)))
             {
                 log.Add($"skipped\t{it.Path}\t" + (votg ? "a VOTG file: restored only after a Yes" : "not changed by our mods: restored only after a Yes"));
                 continue;
@@ -102,8 +109,16 @@ public static partial class CleanState
             bool back = bak != null && File.Exists(bak) && Loader.CanRestore(game, rec, bak, notes);
             if (back)
             {
-                File.Copy(bak!, full);
-                if (FileOwners.Sha(full) != FileOwners.Sha(bak!)) throw new IOException(it.Path + ": write verify failed");
+                try
+                {
+                    File.Copy(bak!, full);
+                    if (FileOwners.Sha(full) != FileOwners.Sha(bak!)) throw new IOException("write verify failed");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // our file is already in the recycle folder; say so, the saved earlier file is still in our backup
+                    throw new IOException($"our file is in the recycle folder ({kept}), the saved earlier file could not be put back: {ex.Message}");
+                }
             }
             Loader.ForgetRecord(game, rec.Game);
             if (back) return $"restored\t{it.Path}";
