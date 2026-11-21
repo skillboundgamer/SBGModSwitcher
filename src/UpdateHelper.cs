@@ -178,6 +178,8 @@ public static class UpdateHelper
             File.Move(t + ".old", t, true);
             n++;
         }
+        var gc = Path.Combine(to, "clrgc.dll");   // 2.0.5 and older need it again (CleanTemp renamed it)
+        if (File.Exists(gc + ".old")) { File.Move(gc + ".old", gc, true); n++; }
         File.Delete(list);
         return n;
     }
@@ -221,7 +223,12 @@ public static class UpdateHelper
         try
         {
             var me = Environment.ProcessPath;
-            if (me != null) TryDelete(Path.Combine(Path.GetDirectoryName(me)!, "clrgc.dll"));
+            // renamed, not deleted: a rollback puts the old exe back, and that one needs the dll (Rollback restores it)
+            if (me != null)
+            {
+                var dll = Path.Combine(Path.GetDirectoryName(me)!, "clrgc.dll");
+                if (File.Exists(dll)) File.Move(dll, dll + ".old", true);
+            }
         }
         catch (Exception) { }
         try
