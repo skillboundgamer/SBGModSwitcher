@@ -9,6 +9,9 @@ namespace ModSwitcher2;
 /// marks a copy of ours already there (a developer's own probe / live.lua: never overwritten).</summary>
 public sealed record LoaderFile(string Src, string Game, string Ours);
 
+/// <summary>Not a failure: the first install beside a VOTG build this Switcher has not tested asks once, the next Apply goes on.</summary>
+public sealed class VotgAskException(string message) : InvalidOperationException(message);
+
 /// <summary>What the app installed (loader\loader.json): the game file, the sha256 it wrote, its backup of the file that was there.</summary>
 public sealed class LoaderRecord
 {
@@ -21,6 +24,9 @@ public sealed class LoaderRecord
     public string? PrevSha { get; set; }
     public bool Matches(string sha) => sha == Sha || (PrevSha != null && sha == PrevSha);
     public string? Backup { get; set; }
+    /// <summary>Our old Kratos stub, now replaced by VOTG's (RetireStub): kept so our stub counts as ours again when VOTG's
+    /// uninstall puts it back, and Remove then takes it out (scenario S4, 2026-11-21). Not "mine" while retired.</summary>
+    public bool Retired { get; set; }
 }
 
 /// <summary>
@@ -146,7 +152,7 @@ public static partial class Loader
     static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     /// <summary>The files this app put into this game folder (what "Remove loader" takes out).</summary>
-    public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot)).ToList();
+    public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot) && !r.Retired).ToList();
 
     /// <summary>True when every loader file is in the game (ours or the developer's own): the loadout can run.</summary>
     public static bool Present(string gameRoot)
@@ -164,7 +170,7 @@ public static partial class Loader
         try
         {
             var root = RootKey(gameRoot);
-            if (!StubWanted(gameRoot) && Records().Any(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase))) return false;
+            if (!StubWanted(gameRoot) && Records().Any(x => x.Root == root && !x.Retired && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase))) return false;
             var hookOk = File.Exists(Path.Combine(gameRoot, ColorDump));   // no core.color dump = no hook (as in Install)
             if (!StubWanted(gameRoot) && !hookOk) return false;                // no starter at all: Install would refuse
             var recs = Records();
@@ -198,7 +204,7 @@ public static partial class Loader
         // a first install beside a VOTG version we did not test asks once (the first Apply says so and stops, the next goes on)
         if (!stub && VotgActive(gameRoot) && VotgReceipt.Read(gameRoot) is { Tested: false } unk && !File.Exists(Path.Combine(gameRoot, Hook.Game))
             && !VotgReceipt.AskedAlready(unk.Payload + "|" + unk.LoaderSha + "|" + unk.ModVersion))
-            throw new InvalidOperationException($"VOTG {unk.ModVersion} is not tested with this Switcher. Our mods would use only their own file and change no VOTG file. Press Apply again to install anyway (nothing was changed).");
+            throw new VotgAskException($"VOTG {unk.ModVersion} is not tested with this Switcher yet. Press Apply again to turn our loader on beside it: our mods use only their own file and change no VOTG file (nothing was changed yet).");
         // Kratos' dump from the player's own wad when MIO has not saved it yet (slow: callers run off the UI thread)
         if (stub)
             foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_heroa00"))
@@ -228,15 +234,21 @@ public static partial class Loader
             var want = SourceBytes(dataRoot, f.Src)!;
             var dest = Path.Combine(gameRoot, f.Game);
             var have = File.Exists(dest) ? File.ReadAllBytes(dest) : null;
-            if (have != null && have.AsSpan().SequenceEqual(want)) continue;                // already in
             var old = recs.FirstOrDefault(r => r.Root == root && r.Game.Equals(f.Game, StringComparison.OrdinalIgnoreCase));
+            if (have != null && have.AsSpan().SequenceEqual(want))                         // already in
+            {
+                // our retired stub is back (VOTG's uninstall put its saved copy back): ours again, so Remove takes it out
+                if (old is { Retired: true } && old.Matches(Sha(have))) { old.Retired = false; SaveRecords(recs); log.Add($"{f.Game}: our earlier Kratos script is back, counted as ours again"); }
+                continue;
+            }
             bool appWrote = have != null && old != null && old.Matches(Sha(have));        // our earlier version: update it
             if (have != null && !appWrote && Encoding.UTF8.GetString(have).Contains(f.Ours, StringComparison.Ordinal))
             {
                 log.Add($"{f.Game}: your own copy is kept");                              // a developer's probe / live.lua
                 continue;
             }
-            string? backup = appWrote ? old!.Backup : null;                                 // an update keeps the first backup
+            // an update keeps the first backup; so does a retired stub whose place is empty now (the file before ours stays known)
+            string? backup = appWrote || (have == null && old is { Retired: true }) ? old!.Backup : null;
             if (have != null && !appWrote)                                                  // another mod's file: keep it safe
             {
                 // one folder per game folder, and to the millisecond: two game folders never share a backup
@@ -301,7 +313,12 @@ public static partial class Loader
         var r = recs.FirstOrDefault(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase));
         if (r == null) return;
         var dest = Path.Combine(gameRoot, r.Game);
-        if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest)))) { log.Add($"{r.Game}: not ours now (VOTG or another mod), left as it is"); recs.Remove(r); SaveRecords(recs); return; }
+        if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest))))
+        {
+            if (r.Retired) return;                                                          // said so already
+            log.Add($"{r.Game}: not ours now (VOTG or another mod), left as it is");
+            r.Retired = true; SaveRecords(recs); return;                                    // kept: VOTG's uninstall may put our stub back
+        }
         if (File.Exists(dest)) File.Delete(dest);
         var bak = r.Backup == null ? null : Path.Combine(Dir, r.Backup);
         bool back = bak != null && File.Exists(bak) && CanRestore(gameRoot, r, bak, log);
@@ -320,7 +337,9 @@ public static partial class Loader
         foreach (var r in recs.Where(r => r.Root == root).ToList())
         {
             var dest = Path.Combine(gameRoot, r.Game);
-            if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest))))
+            bool same = File.Exists(dest) && r.Matches(Sha(File.ReadAllBytes(dest)));
+            if (r.Retired && !same) { /* our old stub is not there (VOTG's file or none): nothing of ours to take */ }
+            else if (File.Exists(dest) && !same)
                 log.Add($"{r.Game}: changed since the app put it in, left as it is");
             else
             {

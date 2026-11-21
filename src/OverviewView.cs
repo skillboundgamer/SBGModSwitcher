@@ -235,6 +235,8 @@ public partial class MainWindow
         return true;
     }
 
+    string? _votgAsk;   // the untested-VOTG question of the last Apply (null = none)
+
     async Task<bool> InstallLoaderAsync(string game, string data)
     {
         await _io.WaitAsync();
@@ -245,6 +247,12 @@ public partial class MainWindow
             Log("Script loader is in: load a checkpoint (or restart the game)", "Ok");
             _extra.Remove("loaderon");
             return true;
+        }
+        catch (VotgAskException ask)
+        {
+            Log("Script loader: " + ask.Message, "Warn");   // a question, not a failure (2.0.5 test, 2026-11-21)
+            _votgAsk = ask.Message;                          // Apply's toast says it too, not "1 failed"
+            return false;
         }
         catch (Exception ex)
         {

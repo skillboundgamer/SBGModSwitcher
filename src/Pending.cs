@@ -220,6 +220,7 @@ public partial class MainWindow
             return;
         }
         int ok = 0, failed = 0; bool full = false;
+        _votgAsk = null;
         foreach (var g in _catalog.Groups.ToList())
         {
             if (!reviewed.TryGetValue(g.Id, out var to)) continue;
@@ -238,6 +239,7 @@ public partial class MainWindow
         UpdatePendingUi();
         if (extras.Count > 0) _ = RefreshModsAsync(); // the figures / slots change what the preset cards match
         if (OldSwitcherOpen()) Log("note: the old Mod Switcher is open; its window now shows an old state", "Warn");
+        if (failed == 1 && _votgAsk is { } ask) { ShowToast((ok > 0 ? $"Applied {ok}. " : "") + ask, "Warn"); return; }   // a question, not a failure
         ShowToast(failed > 0 ? $"Applied {ok}, {failed} failed (still listed; see Activity)"
                              : $"Applied {ok} change{(ok == 1 ? "" : "s")}" + (full ? ": restart the game" : ""),
                   failed > 0 ? "Bad" : "Ok");

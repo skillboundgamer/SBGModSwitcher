@@ -24,8 +24,10 @@ public partial class App
 /// APPDATA holds a settings.json whose GamePath is a SANDBOX game folder with a file sbg_sandbox.txt (else the mode refuses
 /// to run). The window opens off screen in pack mode (SBG_PACKS_ONLY=1, no dev data root) like a player's app.
 /// STEPS = one step per line: loader-on (the Overview button's handler), apply (Apply, no confirm box), update on / update off
-/// (the Settings switch), wait (idle). After "start" and after each step, OUT gets key TAB value lines:
-/// packmode, dataroot, toast (all toasts since the last step, joined by " || "), staged, overview, votg, update, files.
+/// (the Settings switch), refresh (the Refresh button), loader-remove (the loader card's Remove), wait (idle).
+/// After "start" and after each step, OUT gets key TAB value lines: packmode, dataroot, toast (all toasts since the last
+/// step, joined by " || "), staged, overview, loader (card value | link), need (the needs-the-loader banner or "-"),
+/// log (activity lines since the last step), votg, update, files.
 /// Only APPDATA and the sandbox game are written (by Apply).
 /// </summary>
 public partial class MainWindow
@@ -33,6 +35,7 @@ public partial class MainWindow
     public static string? PlayerCheckOut, PlayerCheckSteps;
     public static List<string>? PlayerCheckToasts;
     readonly List<string> PlayerCheckNotes = new();   // a wait that ran out: written into the report, never silent
+    int _pcLogAt;                                     // the activity log written so far (each report has the new lines only)
 
     async Task RunPlayerCheckAsync()
     {
@@ -59,6 +62,8 @@ public partial class MainWindow
                     case "loader-on": StageLoaderOn(); break;
                     case "apply": await ApplyPendingAsync(new Dictionary<string, int>(_pending), _extra.Values.ToList(), LoadoutEdited); break;
                     case "wait": break;
+                    case "refresh": Refresh_Click(this, new RoutedEventArgs()); break;
+                    case "loader-remove": StageLoaderRemove(); break;
 #if !SBG_NEXUS
                     case "update on": _updSwitch.IsChecked = true; _updSwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); break;
                     case "update off": _updSwitch.IsChecked = false; _updSwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); break;
@@ -98,6 +103,11 @@ public partial class MainWindow
         PlayerCheckToasts!.Clear();
         o.Add("staged\t" + string.Join(" || ", _extra.Select(kv => $"{kv.Key}: {kv.Value.Name}: {kv.Value.Change}")));
         o.Add("overview\t" + string.Join(" | ", FindAll<TextBlock>(ViewOverview).Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t))));
+        o.Add("loader\t" + ScriptLoaderValue.Text + " | " + (ScriptLoaderLink.Visibility == Visibility.Visible ? ScriptLoaderLink.Content as string : "-"));
+        o.Add("need\t" + (NeedBanner.Visibility == Visibility.Visible ? NeedText.Text : "-"));
+        var act = _activity.ToString();
+        o.Add("log\t" + string.Join(" || ", act[Math.Min(_pcLogAt, act.Length)..].Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim())));
+        _pcLogAt = act.Length;
         o.Add("votg\t" + VotgValue.Text + " | " + (VotgBanner.Visibility == Visibility.Visible ? VotgText.Text : "-"));
         o.Add("update\t" + _updStatus.Text);
         o.Add("files\t" + string.Join(" | ", Directory.EnumerateFiles(game, "*", SearchOption.AllDirectories)
