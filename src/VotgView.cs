@@ -4,75 +4,83 @@ using System.Windows.Controls;
 namespace ModSwitcher2;
 
 /// <summary>
-/// The VOTG row on the Overview tab (plan 2026-11-17, batch C; design B 2026-11-18): hidden when VOTG is not found. The scan
-/// and the repair run off the UI thread, once per game folder (RefreshStatus calls it, the answer is kept), never on a click.
-/// The UI work is one text set and one button visibility. The button removes only our own files (VOTG keeps every byte).
+/// VOTG on the Overview (plan 2026-11-17, batch C; design B 2026-11-18; revamp batch B 2026-11-19): the VOTG status card
+/// (version, or "Not installed") and a one-line note banner (full text in its tooltip). The scan and the repair run off
+/// the UI thread, once per game folder (RefreshStatus calls it, the answer is kept), never on a click. The UI work is a
+/// few texts and one button visibility. "Turn off our Kratos hook" removes only our own files (VOTG keeps every byte).
 /// </summary>
 public partial class MainWindow
 {
-    Border? _votgCard;
-    TextBlock? _votgText;
-    Button? _votgOff;
     string? _votgScanned;   // the game folder already scanned (case-insensitive); null = none yet
     bool _votgBusy;
-
-    void BuildVotgRow()
-    {
-        if (_votgCard != null) return;
-        _votgText = new TextBlock { FontSize = 12, Foreground = Brush("Dim"), TextWrapping = TextWrapping.Wrap, MaxWidth = 560,
-                                    Margin = new Thickness(22, 1, 0, 0) };
-        var top = new StackPanel { Orientation = Orientation.Horizontal };
-        top.Children.Add(IconPath("IcInfo", "Warn", 0.55));
-        top.Children.Add(new TextBlock { Text = "VOTG mod loader", FontSize = 13, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        _votgOff = new Button { Style = (Style)FindResource("Btn"), Content = "Turn off our Kratos hook", Padding = new Thickness(8, 2, 8, 2),
-                                Margin = new Thickness(22, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed };
-        _votgOff.Click += async (_, _) => await TurnOffKratosHookAsync();
-        var col = new StackPanel();
-        col.Children.Add(top); col.Children.Add(_votgText); col.Children.Add(_votgOff);
-        _votgCard = new Border { Style = (Style)FindResource("CardBox"), Width = 640, HorizontalAlignment = HorizontalAlignment.Left,
-                                 Margin = new Thickness(0, 18, 16, 0), Child = col, Visibility = Visibility.Collapsed };
-        ViewOverview.Children.Insert(_edition?.Id == "tyr" ? 2 : 1, _votgCard);
-    }
+    string? _votgLine;      // "VOTG mod 2.0.0 found ..." for the diagnostic info; null = no VOTG
 
     async Task RefreshVotgAsync()
     {
-        BuildVotgRow();
         var game = _settings.GamePath;
-        if (!GameLocator.IsGameDir(game)) { _votgCard!.Visibility = Visibility.Collapsed; _votgScanned = null; return; }
+        if (!GameLocator.IsGameDir(game)) { ShowVotg(null, null, false); _votgScanned = null; return; }
         if (_votgBusy || string.Equals(_votgScanned, game, StringComparison.OrdinalIgnoreCase)) return;   // once per folder
         _votgBusy = true;
         try
         {
             string? data = _dataRoot;
-            var (r, repair, mine) = await Task.Run(() =>
+            (VotgResult, List<string>, bool) res;
+            await _io.WaitAsync();   // Repair may write: never while a preset is being written
+            try
             {
-                var rep = Votg.Repair(game!, data);   // reads; writes only when our hook went missing (never a VOTG file)
-                return (Votg.Check(game!, data), rep, Loader.Mine(game!).Count > 0);
-            });
+                res = await Task.Run(() =>
+                {
+                    var rep = Votg.Repair(game!, data);   // reads; writes only when our hook went missing (never a VOTG file)
+                    return (Votg.Check(game!, data), rep, Loader.Mine(game!).Count > 0);
+                });
+            }
+            finally { _io.Release(); }
+            var (r, repair, mine) = res;
             _votgScanned = game;
             foreach (var l in repair) Log(l, "Warn");
-            var t = r.Text();
-            _votgText!.Text = t ?? "";
-            _votgOff!.Visibility = r.Info != null && mine ? Visibility.Visible : Visibility.Collapsed;
-            _votgCard!.Visibility = t == null ? Visibility.Collapsed : Visibility.Visible;
+            ShowVotg(r, r.Text(), r.Info != null && mine);
         }
         catch (Exception ex) { Log("VOTG check failed: " + ex.Message, "Warn"); }
         finally { _votgBusy = false; }
     }
 
+    /// <summary>Texts only: the status card and the note banner (short first sentence; the whole text in the tooltip).</summary>
+    void ShowVotg(VotgResult? r, string? text, bool canTurnOff)
+    {
+        _votgLine = text;
+        bool found = r?.Found == true;
+        VotgValue.Text = r == null ? "—" : !found ? "Not installed"
+            : (r.Info?.ModVersion is { Length: > 0 } v ? "Mod v" + v : "Found") + (r.Clash.Count > 0 ? " · clash" : " · beside ours");
+        VotgStatCard.ToolTip = text ?? "VOTG mod loader: not found in this game folder";
+        OvTone(VotgIco, VotgIcon, !found ? "ThAccent" : r!.Clash.Count > 0 || r.Info is { Tested: false } ? "ThWarn" : "ThOk");
+        VotgBanner.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+        if (text == null) return;
+        VotgText.Text = text;      // wraps: the whole text shows (2.0.5 test: a cut "…" hid the button name it asks for)
+        VotgText.ToolTip = text;
+        VotgOff.Visibility = canTurnOff ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    async void VotgOff_Click(object sender, RoutedEventArgs e) => await TurnOffKratosHookAsync();
+
     async Task TurnOffKratosHookAsync()
     {
         var game = _settings.GamePath;
         if (!GameLocator.IsGameDir(game)) return;
-        _votgOff!.IsEnabled = false;
+        VotgOff.IsEnabled = false;
         try
         {
-            foreach (var l in await Task.Run(() => Loader.Remove(game!))) Log("  " + l);
+            List<string> removed;
+            await _io.WaitAsync();   // never remove while a preset is being written
+            try { removed = await Task.Run(() => Loader.Remove(game!)); }
+            finally { _io.Release(); }
+            foreach (var l in removed) Log("  " + l);
             Log("Our Kratos hook is off. VOTG was not changed.", "Ok");
             _votgScanned = null;   // scan again
             await RefreshVotgAsync();
+            _ = RefreshScriptLoaderAsync();
+            _ = RefreshModsAsync();
         }
         catch (Exception ex) { Log("Turn off failed: " + ex.Message, "Bad"); }
-        finally { _votgOff.IsEnabled = true; }
+        finally { VotgOff.IsEnabled = true; }
     }
 }

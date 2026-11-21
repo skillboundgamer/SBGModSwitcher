@@ -285,11 +285,24 @@ public partial class MainWindow
                 try
                 {
                     // Each group is checked on the thread pool; each card updates as soon as its own answer is in.
+                    string gameNow = _settings.GamePath!;
+                    _loaderWait.Clear();   // a removed pack's group never answers again: start empty, each group sets its own
                     await Task.WhenAll(_catalog.Groups.ToList().Select(async g =>
                     {
                         var m = Matcher(g.Root);
-                        int idx = await Task.Run(() => m.Check(g));
+                        var (idx, wait) = await Task.Run(() =>
+                        {
+                            int i = m.Check(g), w = -1;
+                            // loader out: are this group's "loader" files still in? Then it waits for the loader (Overview banner)
+                            if (i < 0 && g.Presets.Any(p => p.UsesLoader) && !Loader.Present(gameNow))
+                            {
+                                w = m.Check(g, true);
+                                if (w >= 0 && !g.Presets[w].UsesLoader) w = -1;
+                            }
+                            return (i, w);
+                        });
                         if (!_cards.TryGetValue(g.Id, out var card)) return;   // its pack was removed meanwhile
+                        if (wait >= 0) _loaderWait[g.Id] = wait; else _loaderWait.Remove(g.Id);
                         _active[g.Id] = idx;
                         ShowActive(card, idx);
                     }));
@@ -301,6 +314,7 @@ public partial class MainWindow
                 if (_extra.Count == 0) LoadTweaksFromDisk(); else TweakChanged(); // the probe note follows the probe card
                 if (_slotTarget.Count == 0) LoadSlotsFromDisk();
                 _ = RefreshSetupAsync();
+                _ = RefreshScriptLoaderAsync();   // an Apply may have put the loader in (a "loader" preset)
             } while (_modCheckAgain);
         }
         catch (Exception ex)
@@ -339,21 +353,38 @@ public partial class MainWindow
     {
         if (_catalog == null) return;
         ActiveChips.Children.Clear();
+        // no mod loader at all (no MIO, no VOTG): nothing in mod\ is loaded, so those mods do not run (two file checks)
+        var gameNow = _settings.GamePath;
+        bool noLoader = LoaderUse.NoLoader(gameNow);
+        int notRunning = 0;
         foreach (var g in _catalog.Groups)
         {
             if (!_active.TryGetValue(g.Id, out var idx) || idx == g.Vanilla) continue;
+            bool waits = idx < 0 && _loaderWait.TryGetValue(g.Id, out var w) && (idx = w) >= 0;   // files in, loader out
             var what = idx < 0 ? "Custom" : g.Presets[idx].Label;
+            bool usesLoader = idx >= 0 && g.Presets[idx].UsesLoader;
+            bool dead = LoaderUse.NotRunning(noLoader, g, idx);
+            if (dead) notRunning++;
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
-            sp.Children.Add(IconPath(g.Icon, idx < 0 ? "Warn" : "Acc", 0.7));
-            sp.Children.Add(new TextBlock { Text = $"{g.Name} · {what}", Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            var chip = new Button { Style = (Style)FindResource("Chip"), Content = sp, ToolTip = "Show this mod" };
+            sp.Children.Add(new TextBlock { Text = g.Name, VerticalAlignment = VerticalAlignment.Center });
+            sp.Children.Add(new TextBlock { Text = what, Foreground = Brush("ThMuted"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            if (dead || usesLoader)
+                sp.Children.Add(new TextBlock { Text = dead ? "not running" : waits ? "needs loader" : "uses loader", FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+                                                Foreground = Brush(dead || waits ? "ThWarn" : "ThFaint"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            var chip = new Button { Style = (Style)FindResource("Chip"), Content = sp,
+                                    ToolTip = dead ? "No mod loader (MIO or VOTG) in the game folder: this mod does not run. Install GoWR MIO."
+                                            : waits ? "Its files are in, but the script loader is off: it does not run. Turn the loader on (Overview)."
+                                            : usesLoader ? "Runs through the script loader. Show this mod" : "Show this mod" };
+            if (dead || waits) { chip.Background = Brush("ThWarnBg"); chip.BorderBrush = Brush("ThNeedLine"); }
             chip.Click += (_, _) => GoToCard(g);
             ActiveChips.Children.Add(chip);
         }
         int n = ActiveChips.Children.Count;
-        ActiveHeader.Text = n == 0 ? "Active mods" : $"Active mods · {n}";
+        ActiveHeader.Text = n == 0 ? "Active mods" : $"Active mods · {n}" + (notRunning > 0 ? " (not running)" : "");
         ActiveEmpty.Content = "No mods active: the game is vanilla";
         ActiveEmpty.Visibility = n == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateNeedBanner();   // OverviewView.cs
+        UpdateHero(TopProblem());
     }
 
     void GoToCard(ModGroup g)
@@ -384,5 +415,12 @@ public partial class MainWindow
         }
     }
 
-    void Refresh_Click(object sender, RoutedEventArgs e) => _ = RefreshModsAsync();
+    /// <summary>Overview "Refresh": mods, the script loader card and VOTG again (2.0.5 test: VOTG installed while the app was
+    /// open showed only after a restart). All three read files off the UI thread.</summary>
+    void Refresh_Click(object sender, RoutedEventArgs e)
+    {
+        _ = RefreshModsAsync();
+        _ = RefreshScriptLoaderAsync();
+        _votgScanned = null; _ = RefreshVotgAsync();
+    }
 }

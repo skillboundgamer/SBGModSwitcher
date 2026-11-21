@@ -9,6 +9,9 @@ namespace ModSwitcher2;
 /// marks a copy of ours already there (a developer's own probe / live.lua: never overwritten).</summary>
 public sealed record LoaderFile(string Src, string Game, string Ours);
 
+/// <summary>Not a failure: the first install beside a VOTG build this Switcher has not tested asks once, the next Apply goes on.</summary>
+public sealed class VotgAskException(string message) : InvalidOperationException(message);
+
 /// <summary>What the app installed (loader\loader.json): the game file, the sha256 it wrote, its backup of the file that was there.</summary>
 public sealed class LoaderRecord
 {
@@ -21,6 +24,9 @@ public sealed class LoaderRecord
     public string? PrevSha { get; set; }
     public bool Matches(string sha) => sha == Sha || (PrevSha != null && sha == PrevSha);
     public string? Backup { get; set; }
+    /// <summary>Our old Kratos stub, now replaced by VOTG's (RetireStub): kept so our stub counts as ours again when VOTG's
+    /// uninstall puts it back, and Remove then takes it out (scenario S4, 2026-11-21). Not "mine" while retired.</summary>
+    public bool Retired { get; set; }
 }
 
 /// <summary>
@@ -34,7 +40,7 @@ public sealed class LoaderRecord
 /// installed; a missing file is installed; a file of ours already there (the developer's own probe or live.lua) is left
 /// alone; any other file is backed up first. Remove takes out only what this app wrote and puts the backups back.
 /// </summary>
-public static class Loader
+public static partial class Loader
 {
     public const string Ini = @"mod\GOWR_MIO.ini";
     public const string Dump = @"mod\dump\int9\gameart\scripts\characters\heroa00\main.lua";
@@ -121,128 +127,6 @@ public static class Loader
         return null;
     }
 
-    /// <summary>True when the four MIO switches the app needs are on: visualscript and lua under [dump] and [replace].</summary>
-    public static bool IniAllOn(string text) =>
-        IniKeys.All(k => IniOn(text, k.Section, k.Key));
-
-    static readonly (string Section, string Key)[] IniKeys =
-        { ("dump", "visualscript"), ("dump", "lua"), ("replace", "visualscript"), ("replace", "lua") };
-
-    /// <summary>Sets <paramref name="key"/>=1 under [<paramref name="section"/>]: a 0 value is changed in place, a missing key is
-    /// added right under the section line, a missing section is added at the end. Every other byte stays (comments, order,
-    /// CRLF or LF). Pure text in, text out.</summary>
-    public static string IniSet(string text, string section, string key)
-    {
-        string eol = text.Contains("\r\n") ? "\r\n" : "\n";
-        string cr = eol == "\r\n" ? "\r" : "";
-        var lines = text.Split('\n').ToList();   // a line keeps its own '\r'
-        int head = -1;
-        for (int i = 0; i < lines.Count; i++)
-        {
-            var t = lines[i].Trim();
-            if (i == 0 && t.StartsWith("ï»¿")) t = t[3..];   // a UTF-8 BOM read as Latin1; the bytes stay
-            if (t.Length == 0 || t[0] == ';') continue;
-            if (t[0] == '[')
-            {
-                if (head >= 0) break;                                  // the next section: the key is not in ours
-                if (t.Trim('[', ']').Trim().Equals(section, StringComparison.OrdinalIgnoreCase)) head = i;
-                continue;
-            }
-            if (head < 0) continue;
-            int eq = lines[i].IndexOf('=');
-            if (eq <= 0 || !lines[i][..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) continue;
-            var rest = lines[i][(eq + 1)..];
-            int semi = rest.IndexOf(';');                                 // an inline comment stays
-            var val = semi < 0 ? rest : rest[..semi];
-            if (val.Trim() == "1") return text;                          // already on
-            int ws = 0;
-            while (ws < rest.Length && (rest[ws] == ' ' || rest[ws] == '\t')) ws++;
-            // the space before the comment (or the CR) after the value stays
-            lines[i] = lines[i][..(eq + 1)] + rest[..ws] + "1" + val[Math.Max(ws, val.TrimEnd().Length)..] + (semi < 0 ? "" : rest[semi..]);
-            return string.Join("\n", lines);
-        }
-        if (head >= 0)
-        {
-            if (cr.Length > 0 && !lines[head].EndsWith('\r')) lines[head] += "\r";
-            bool wasLast = head == lines.Count - 1;                    // header is the last line, no final newline
-            lines.Insert(head + 1, key + "=1" + cr);
-            if (wasLast) lines.Add("");                                // end with a proper EOL, not a lone CR
-            return string.Join("\n", lines);
-        }
-        var sb = new StringBuilder(text);
-        if (text.Length > 0 && !text.EndsWith('\n')) sb.Append(eol);
-        sb.Append('[').Append(section).Append(']').Append(eol).Append(key).Append("=1").Append(eol);
-        return sb.ToString();
-    }
-
-    static string IniPath(string gameRoot) => Path.Combine(gameRoot, Ini);
-    static string IniBeside(string gameRoot) => IniPath(gameRoot) + ".sbgbak";
-    static string IniCopy(string gameRoot) =>
-        Path.Combine(Dir, "ini-" + Sha(Encoding.UTF8.GetBytes(RootKey(gameRoot)))[..10] + ".bak");
-    static string IniWritten(string gameRoot) => IniCopy(gameRoot) + ".sha";
-
-    /// <summary>Turns the four MIO switches on (see <see cref="IniSet"/>), after one backup of the player's ini. Returns plain text.</summary>
-    public static string IniFix(string gameRoot)
-    {
-        var path = IniPath(gameRoot);
-        if (!File.Exists(path)) return "Install GoWR MIO first";
-        var raw = File.ReadAllBytes(path);
-        var text = Encoding.Latin1.GetString(raw);     // Latin1 round-trips every byte
-        var fixedText = text;
-        foreach (var (sec, key) in IniKeys) fixedText = IniSet(fixedText, sec, key);
-        if (fixedText == text) return "GoWR MIO is already set";
-        if (!File.Exists(IniBeside(gameRoot))) File.WriteAllBytes(IniBeside(gameRoot), raw);   // never over an older backup
-        if (!File.Exists(IniCopy(gameRoot)))
-        {
-            Directory.CreateDirectory(Dir);
-            File.WriteAllBytes(IniCopy(gameRoot), raw);
-        }
-        var tmp = path + ".sbgtmp";
-        var written = Encoding.Latin1.GetBytes(fixedText);
-        File.WriteAllBytes(tmp, written);
-        File.Move(tmp, path, overwrite: true);
-        Directory.CreateDirectory(Dir);
-        File.WriteAllText(IniWritten(gameRoot), Sha(written));   // Restore checks the ini is still ours
-        return "GoWR MIO is set: dump and replace are on. Start the game once.";
-    }
-
-    /// <summary>True when the app changed the ini and the player's first version is still saved.</summary>
-    public static bool IniBackupExists(string gameRoot) => File.Exists(IniBeside(gameRoot)) || File.Exists(IniCopy(gameRoot));
-
-    /// <summary>Puts the player's first ini back (the backup beside it, else the app's copy) and removes the backups. Null = no backup.</summary>
-    public static string? IniRestore(string gameRoot)
-    {
-        var src = File.Exists(IniBeside(gameRoot)) ? IniBeside(gameRoot) : File.Exists(IniCopy(gameRoot)) ? IniCopy(gameRoot) : null;
-        if (src == null) return null;
-        var mark = IniWritten(gameRoot);
-        if (File.Exists(mark) && File.Exists(IniPath(gameRoot))
-            && Sha(File.ReadAllBytes(IniPath(gameRoot))) != File.ReadAllText(mark).Trim())
-            return "GoWR_MIO.ini changed since Fix it, left as it is";
-        File.Copy(src, IniPath(gameRoot), overwrite: true);
-        try { File.Delete(IniBeside(gameRoot)); File.Delete(IniCopy(gameRoot)); File.Delete(mark); } catch (IOException) { }
-        return "GoWR_MIO.ini is back as it was";
-    }
-
-    /// <summary>True when <paramref name="key"/>=1 in [<paramref name="section"/>] (MIO: only 1 is "on"; ; starts a comment).</summary>
-    public static bool IniOn(string ini, string section, string key)
-    {
-        string cur = "";
-        foreach (var raw in ini.Split('\n'))
-        {
-            var line = raw.Trim();
-            if (line.Length == 0 || line[0] == ';') continue;
-            if (line[0] == '[') { cur = line.Trim('[', ']').Trim(); continue; }
-            int eq = line.IndexOf('=');
-            if (eq <= 0 || !cur.Equals(section, StringComparison.OrdinalIgnoreCase)) continue;
-            if (line[..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
-            {
-                var v = line[(eq + 1)..]; int semi = v.IndexOf(';');
-                return (semi < 0 ? v : v[..semi]).Trim() == "1";
-            }
-        }
-        return false;
-    }
-
     public static List<LoaderRecord> Records()
     {
         try
@@ -268,14 +152,16 @@ public static class Loader
     static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     /// <summary>The files this app put into this game folder (what "Remove loader" takes out).</summary>
-    public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot)).ToList();
+    public static List<LoaderRecord> Mine(string gameRoot) => Records().Where(r => r.Root == RootKey(gameRoot) && !r.Retired).ToList();
 
     /// <summary>True when every loader file is in the game (ours or the developer's own): the loadout can run.</summary>
     public static bool Present(string gameRoot)
     {
         bool Has(LoaderFile f) => File.Exists(Path.Combine(gameRoot, f.Game));
-        // Kratos' script starts the probe by the stub (MIO) or by the hook (VOTG, or MIO with the stub off): one of them is enough
-        return Has(Tail) && Has(Live) && (Has(Stub) || Has(Hook));
+        // Kratos' script starts the probe by the stub (MIO) or by the hook (VOTG, or MIO with the stub off): one of them is enough.
+        // With VOTG the Kratos main.lua is VOTG's own and never starts our probe: only our hook counts (2.0.5 test, 2026-11-21:
+        // the card said "In place" with the hook missing, and Turn loader on was hidden).
+        return Has(Tail) && Has(Live) && (Has(Hook) || (!VotgActive(gameRoot) && Has(Stub)));
     }
 
     /// <summary>True when every chain file is in the game with our exact bytes and no old stub of ours waits to be taken out: Install would write nothing.</summary>
@@ -284,7 +170,7 @@ public static class Loader
         try
         {
             var root = RootKey(gameRoot);
-            if (!StubWanted(gameRoot) && Records().Any(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase))) return false;
+            if (!StubWanted(gameRoot) && Records().Any(x => x.Root == root && !x.Retired && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase))) return false;
             var hookOk = File.Exists(Path.Combine(gameRoot, ColorDump));   // no core.color dump = no hook (as in Install)
             if (!StubWanted(gameRoot) && !hookOk) return false;                // no starter at all: Install would refuse
             var recs = Records();
@@ -318,7 +204,7 @@ public static class Loader
         // a first install beside a VOTG version we did not test asks once (the first Apply says so and stops, the next goes on)
         if (!stub && VotgActive(gameRoot) && VotgReceipt.Read(gameRoot) is { Tested: false } unk && !File.Exists(Path.Combine(gameRoot, Hook.Game))
             && !VotgReceipt.AskedAlready(unk.Payload + "|" + unk.LoaderSha + "|" + unk.ModVersion))
-            throw new InvalidOperationException($"VOTG {unk.ModVersion} is not tested with this Switcher. Our mods would use only their own file and change no VOTG file. Press Apply again to install anyway (nothing was changed).");
+            throw new VotgAskException($"VOTG {unk.ModVersion} is not tested with this Switcher yet. Press Apply again to turn our loader on beside it: our mods use only their own file and change no VOTG file (nothing was changed yet).");
         // Kratos' dump from the player's own wad when MIO has not saved it yet (slow: callers run off the UI thread)
         if (stub)
             foreach (var f in DumpFill.FillMissing(gameRoot, only: "r_heroa00"))
@@ -348,15 +234,21 @@ public static class Loader
             var want = SourceBytes(dataRoot, f.Src)!;
             var dest = Path.Combine(gameRoot, f.Game);
             var have = File.Exists(dest) ? File.ReadAllBytes(dest) : null;
-            if (have != null && have.AsSpan().SequenceEqual(want)) continue;                // already in
             var old = recs.FirstOrDefault(r => r.Root == root && r.Game.Equals(f.Game, StringComparison.OrdinalIgnoreCase));
+            if (have != null && have.AsSpan().SequenceEqual(want))                         // already in
+            {
+                // our retired stub is back (VOTG's uninstall put its saved copy back): ours again, so Remove takes it out
+                if (old is { Retired: true } && old.Matches(Sha(have))) { old.Retired = false; SaveRecords(recs); log.Add($"{f.Game}: our earlier Kratos script is back, counted as ours again"); }
+                continue;
+            }
             bool appWrote = have != null && old != null && old.Matches(Sha(have));        // our earlier version: update it
             if (have != null && !appWrote && Encoding.UTF8.GetString(have).Contains(f.Ours, StringComparison.Ordinal))
             {
                 log.Add($"{f.Game}: your own copy is kept");                              // a developer's probe / live.lua
                 continue;
             }
-            string? backup = appWrote ? old!.Backup : null;                                 // an update keeps the first backup
+            // an update keeps the first backup; so does a retired stub whose place is empty now (the file before ours stays known)
+            string? backup = appWrote || (have == null && old is { Retired: true }) ? old!.Backup : null;
             if (have != null && !appWrote)                                                  // another mod's file: keep it safe
             {
                 // one folder per game folder, and to the millisecond: two game folders never share a backup
@@ -385,7 +277,8 @@ public static class Loader
             {
                 // nothing changed in the game: the old record (an update) or none (a fresh file); no orphan backup
                 SaveRecords(before);
-                if (backup != null && !appWrote) try { File.Delete(Path.Combine(Dir, backup)); } catch (IOException) { }
+                // only a backup made in this pass: a carried-over one (an update, a retired stub) is the only copy of that file (review 2026-11-21)
+                if (backup != null && have != null && !appWrote) try { File.Delete(Path.Combine(Dir, backup)); } catch (IOException) { }
                 throw;
             }
             finally { if (File.Exists(tmp)) File.Delete(tmp); }
@@ -421,7 +314,12 @@ public static class Loader
         var r = recs.FirstOrDefault(x => x.Root == root && x.Game.Equals(KratosMain, StringComparison.OrdinalIgnoreCase));
         if (r == null) return;
         var dest = Path.Combine(gameRoot, r.Game);
-        if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest)))) { log.Add($"{r.Game}: not ours now (VOTG or another mod), left as it is"); recs.Remove(r); SaveRecords(recs); return; }
+        if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest))))
+        {
+            if (r.Retired) return;                                                          // said so already
+            log.Add($"{r.Game}: not ours now (VOTG or another mod), left as it is");
+            r.Retired = true; SaveRecords(recs); return;                                    // kept: VOTG's uninstall may put our stub back
+        }
         if (File.Exists(dest)) File.Delete(dest);
         var bak = r.Backup == null ? null : Path.Combine(Dir, r.Backup);
         bool back = bak != null && File.Exists(bak) && CanRestore(gameRoot, r, bak, log);
@@ -440,7 +338,9 @@ public static class Loader
         foreach (var r in recs.Where(r => r.Root == root).ToList())
         {
             var dest = Path.Combine(gameRoot, r.Game);
-            if (File.Exists(dest) && !r.Matches(Sha(File.ReadAllBytes(dest))))
+            bool same = File.Exists(dest) && r.Matches(Sha(File.ReadAllBytes(dest)));
+            if (r.Retired && !same) { /* our old stub is not there (VOTG's file or none): nothing of ours to take */ }
+            else if (File.Exists(dest) && !same)
                 log.Add($"{r.Game}: changed since the app put it in, left as it is");
             else
             {

@@ -19,6 +19,9 @@ public partial class App : Application
         if (a.Length > 2 && a[0] == "--perf") { StartPerf(a[1], a[2]); return; }   // hidden timing mode (Perf.cs)
         if (a.Length > 2 && a[0] == "--guide-demo") { StartGuideDemo(a[1], a[2]); return; }   // hidden guide screenshots (GuideDemo.cs)
         if (a.Length > 3 && a[0] == "--pack-demo") { StartPackDemo(a[1], a[2], a[3]); return; }   // hidden demo mode (PacksDemo.cs)
+#if SBG_DEV
+        if (a.Length > 3 && a[0] == "--player-check") { StartPlayerCheck(a[1], a[2], a[3]); return; }   // hidden player-app test mode (PlayerCheck.cs)
+#endif
         if (a.Length > 0 && a[0].StartsWith("--"))
         {
             int code;
@@ -63,6 +66,11 @@ public partial class App : Application
         {
             case "--votg":   // --votg --game D [--data D] : the VOTG check (Votg.cs; tests)
                 return Votg.Cli(Opt("--game") ?? throw new ArgumentException("--votg needs --game <folder>"), Opt("--data"), o);
+            case "--search":   // --search QUERY [--data D] [--game D] : the top search box's hits (SearchIndex.cs; tests), UTF-8
+            {
+                using var u8 = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
+                return SearchIndex.Cli(a.Length > 1 ? a[1] : "", Opt("--data"), Opt("--game"), u8);
+            }
             case "--libraries":
                 foreach (var p in GameLocator.ParseLibraryPaths(File.ReadAllText(a[1]))) o.WriteLine(p);
                 return 0;
@@ -223,6 +231,17 @@ public partial class App : Application
                         o.WriteLine($"present\t{(Loader.Present(g) ? "true" : "false")}");
                         foreach (var rec in Loader.Records().Where(x => x.Root == Loader.RootKey(g))) o.WriteLine($"record\t{rec.Game}\t{rec.Backup ?? "-"}");
                         return 0;
+                    case "uses":   // --loader uses --game D [--data D] : who stops on Remove / who waits for the loader (Overview)
+                    {
+                        var ud = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
+                        var lu = LoaderUse.Scan(ModCatalog.Load(DataRoot.CatalogPath(ud), Edition.Load(ud)), g, ud);
+                        o.WriteLine($"present\t{(Loader.Present(g) ? "true" : "false")}");
+                        foreach (var n in lu.Uses) o.WriteLine("uses\t" + n);
+                        foreach (var n in lu.Waits) o.WriteLine("waits\t" + n);
+                        foreach (var n in LoaderUse.NotRunningList(ModCatalog.Load(DataRoot.CatalogPath(ud), Edition.Load(ud)), g, ud)) o.WriteLine("notrunning\t" + n);
+                        o.WriteLine("remove\t" + (LoaderUse.RemoveBlock(g) ?? "ok"));
+                        return 0;
+                    }
                     case "install":
                         var d = Opt("--data") ?? DataRoot.Find() ?? throw new DirectoryNotFoundException("data root not found");
                         foreach (var line in Loader.Install(g, d)) o.WriteLine(line);
@@ -249,6 +268,40 @@ public partial class App : Application
                         throw new ArgumentException("--loader check|install|remove");
                 }
             }
+            case "--report-text":
+            {
+                // --report-text --activity FILE --mio FILE --game DIR --user DIR --name N : the Report a problem text (ReportText.cs; tests only)
+                var act = Opt("--activity") is { } af ? File.ReadAllText(af) : "";
+                var mio = Opt("--mio") is { } mf ? File.ReadAllLines(mf) : Array.Empty<string>();
+                o.Write(ReportText.Build("9.9.9", act, mio, Opt("--game"), Opt("--user"), Opt("--name")));
+                return 0;
+            }
+            case "--report-v2":
+            {
+                // --report-v2 --game DIR [--data DIR] [--activity FILE] [--user DIR] [--name N] : the v2 report text (ReportV2.cs; tests only)
+                var act = Opt("--activity") is { } af ? File.ReadAllText(af) : "";
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var text = ReportV2.Build(new ReportV2.Input("9.9.9", act, Opt("--game"), Opt("--data"), Opt("--user"), Opt("--name"), AppSettings.Load()));
+                o.Write(text);
+                Console.Error.WriteLine($"report-v2: {text.Length} chars in {sw.ElapsedMilliseconds} ms");
+                return 0;
+            }
+            case "--crash-dmp":
+            {
+                // --crash-dmp FILE [--game DIR] : the crash facts of one dump (CrashInfo.cs; tests only)
+                var g = Opt("--game");
+                var cr = CrashInfo.Read(Opt("--crash-dmp") ?? throw new ArgumentException("--crash-dmp FILE"), p => CrashInfo.TagModule(p, g, false));
+                o.WriteLine($"time\t{cr.Time:yyyy-MM-dd HH:mm:ss}");
+                o.WriteLine($"code\t0x{cr.Code:X8}");
+                o.WriteLine($"where\t{cr.Where}");
+                if (cr.AccessText != null) o.WriteLine("access\t" + cr.AccessText);
+                if (cr.Known != null) o.WriteLine("known\t" + cr.Known);
+                foreach (var (mo, tag, n) in cr.StackModules) o.WriteLine($"module\t{mo}\t{n}\t{tag}");
+                return 0;
+            }
+            case "--version":   // --version : the app version as the bottom bar and the report show it (tests)
+                o.WriteLine(ModSwitcher2.MainWindow.AppVersionText());
+                return 0;
             case "--edition":
             {
                 // --edition [--data D] : the edition file of a data folder (Edition.cs), "key<TAB>value" lines (tests only);
@@ -327,6 +380,20 @@ public partial class App : Application
                     foreach (var w in kv.Value) o.WriteLine($"{kv.Key}\t{w}");
                 return 0;
             }
+#if !SBG_NEXUS
+            case "--update-check":      // the update modes (UpdateCli.cs); the Nexus build has none of them
+            case "--update-prepare":
+            case "--update-apply":
+            case "--update-rollback":
+                return UpdateCli.Run(a, o);
+#endif
+            case "--build-kind":   // --build-kind : "github" (Update button) or "nexus" (no network code at all), tests
+#if SBG_NEXUS
+                o.WriteLine("nexus");
+#else
+                o.WriteLine("github");
+#endif
+                return 0;
             default:
                 Console.Error.WriteLine("unknown option " + a[0]);
                 return 2;

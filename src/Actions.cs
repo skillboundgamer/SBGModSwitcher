@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -104,6 +105,9 @@ public partial class MainWindow
 
     void ShowToast(string text, string tone)
     {
+#if SBG_DEV
+        PlayerCheckToasts?.Add(text);   // --player-check collects every toast (PlayerCheck.cs)
+#endif
         ToastText.Text = text;
         ToastText.Foreground = Brush(tone);
         ToastIcon.Stroke = Brush(tone);
@@ -142,6 +146,27 @@ public partial class MainWindow
         if (open) ActivityScroll.ScrollToEnd();
     }
 
+    /// <summary>Report a problem (2026-11-13): builds the report off the UI thread, copies it, opens the Discord invite.</summary>
+    async void ReportProblem_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string ver = _edition != null && !_packMode ? _edition.Version : AppVersionText();
+            string activity = _activity.ToString(), game = _settings.GamePath ?? "";
+            string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), name = Environment.UserName;
+            var settings = _settings;
+            // v2 (2.0.5 B2): versions, loader state, owner map, crash section; undo = the ReportText.Build line below
+            var text = await Task.Run(() => ReportV2.Build(new ReportV2.Input(ver, activity, game, DataRoot.Find(), user, name, settings)));
+            // var text = await Task.Run(() => ReportText.Build(ver, activity, ReportText.ReadMioTail(game), game, user, name));
+            Clipboard.SetText(text);
+            ShowToast(ReportText.Hint, "Acc");
+            Log(ReportText.Hint);
+            Process.Start(new ProcessStartInfo(Edition.SafeUrl(ReportText.DiscordInvite)) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) { ShowToast("Could not make the report: " + ex.Message, "Bad"); }
+    }
+
+    // the old Copy-log button (whole activity log, no scrub); kept as a second button, undo = remove Report a problem
     void CopyLog_Click(object sender, RoutedEventArgs e)
     {
         try { Clipboard.SetText(_activity.Length == 0 ? "(empty)" : _activity.ToString()); ShowToast("Activity log copied", "Acc"); }

@@ -22,6 +22,8 @@ public sealed class AppSettings
     public string ItemsLanguage { get; set; } = "en";
     /// <summary>The King's Grave figures last applied from this app (the files cannot be read back into the picker).</summary>
     public FiguresChoice? LastFigures { get; set; }
+    /// <summary>Look for a new version once at start (GitHub build only; the Nexus build never goes online).</summary>
+    public bool CheckUpdates { get; set; } = true;
 
     public static string Dir => DirOverride ??
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SBGModSwitcher");

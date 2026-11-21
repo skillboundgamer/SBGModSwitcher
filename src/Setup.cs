@@ -139,7 +139,7 @@ public partial class MainWindow
         }
         var card = new Border { Style = (Style)FindResource("CardBox"), Width = 640, HorizontalAlignment = HorizontalAlignment.Left,
                                 Margin = new Thickness(0, 18, 16, 0), Child = stack };
-        ViewOverview.Children.Insert(1, card);
+        ViewOverview.Children.Insert(ViewOverview.Children.IndexOf(OvBanners) + 1, card);   // under the banners (revamp batch B)
     }
     readonly Dictionary<string, TextBlock> _setupNames = new();
 

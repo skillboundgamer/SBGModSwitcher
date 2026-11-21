@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -17,7 +18,6 @@ public partial class MainWindow : Window
 {
     /// <summary>Raise when the disclaimer text changes, so every player sees it once more.</summary>
     const int DisclaimerVersion = 1;
-    const double RailClosed = 64, RailOpen = 210;
 
     readonly AppSettings _settings = AppSettings.Load();
     readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -31,11 +31,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        try { Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/logo/app.ico")); } catch { }   // window + taskbar icon
         SourceInitialized += (_, _) => UseDarkTitleBar();
         Loaded += OnFirstLoaded;
         _watch.Tick += async (_, _) => { await CheckGameAsync(); await CheckOldSwitcherAsync(); };
 
         RadioButton[] tabs = { TabOverview, TabBoss, TabCompanions, TabValhalla, TabTweaks };
+        for (int i = 0; i < tabs.Length; i++) NavTip(tabs[i], $"Ctrl+{i + 1}");
         if (LoadEdition()) tabs = ApplyEditionChrome(tabs);
 #if SBG_DEV
         Title = "SBG Switcher DEV";   // our own build (csproj SBG_DEV): never mixed up with the public installer
@@ -47,6 +49,8 @@ public partial class MainWindow : Window
                                              Key.D1 + i, ModifierKeys.Control));
         }
         InputBindings.Add(new KeyBinding(new Relay(() => { if (SearchBox.IsVisible) SearchText.Focus(); }), Key.F, ModifierKeys.Control));
+        InputBindings.Add(new KeyBinding(new Relay(FocusTopSearch), Key.K, ModifierKeys.Control));
+        SearchRowsBuild();
         InputBindings.Add(new KeyBinding(new Relay(() => { if (Rail.IsEnabled && PendingCount > 0) OpenReview(); }), Key.S, ModifierKeys.Control));
         // Coming back from the old Switcher or the game: check the files again (cheap, results are cached).
         Activated += (_, _) => { if (DateTime.UtcNow - _lastModCheck > TimeSpan.FromSeconds(3)) _ = RefreshModsAsync(); };
@@ -76,7 +80,7 @@ public partial class MainWindow : Window
         {
             if (TabKeys.TryGetValue(t, out var key) && !_edition.ShowsTab(key)) { t.Visibility = Visibility.Collapsed; continue; }
             left.Add(t);
-            t.ToolTip = $"{t.Tag} (Ctrl+{left.Count})";
+            NavTip(t, $"Ctrl+{left.Count}");
         }
         ShowCommunity();
         return left.ToArray();
@@ -110,20 +114,35 @@ public partial class MainWindow : Window
         catch (Exception ex) { _startError = ex.Message; UpdateBanner(); }
     }
 
-    async Task StartAsync()
+    /// <summary>The app version as the release names it: 2.0.4, or 2.0.4.1 for a hotfix (the 4th number only when set).</summary>
+    internal static string AppVersionText()
     {
         var v = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionValue.Text = _edition != null && !_packMode ? "v" + _edition.Version : v == null ? "v2" : $"v{v.Major}.{v.Minor}.{v.Build}";
+        if (v == null) return "2";
+        return v.Revision > 0 ? $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}" : $"{v.Major}.{v.Minor}.{v.Build}";
+    }
+
+    async Task StartAsync()
+    {
+        VersionValue.Text = "v" + (_edition != null && !_packMode ? _edition.Version : AppVersionText());
 
         BuildModCards();
         BuildSetupCard();
+        BuildUpdateCard();   // UpdateView.cs: the Settings card (GitHub build: the switch; Nexus build: text only)
+        RebuildSearch();   // off the UI thread (SearchIndex.cs)
         GuideButton.Visibility = _packMode ? Visibility.Visible : Visibility.Collapsed;
         if (GuideDemoOut != null) { await RunGuideDemoAsync(); return; }   // hidden --guide-demo mode (GuideDemo.cs)
-        bool demo = PerfOut != null || PackDemoOut != null;   // the timing / demo modes take their own screenshots
+        bool demo = PerfOut != null || PackDemoOut != null;
+#if SBG_DEV
+        demo |= PlayerCheckOut != null;
+#endif   // the timing / demo modes take their own screenshots
         if (_packMode && !_settings.GuideDone && !demo) ShowGuide();   // the guide holds the disclaimer as its step 3
         else if (_settings.DisclaimerAccepted < DisclaimerVersion) ShowDisclaimer();
         if (PerfOut != null) { await RunPerfAsync(); return; }   // hidden --perf timing mode (Perf.cs)
         if (PackDemoOut != null) { await RunPackDemoAsync(); return; }   // hidden --pack-demo mode (PacksDemo.cs)
+#if SBG_DEV
+        if (PlayerCheckOut != null) { await RunPlayerCheckAsync(); return; }   // hidden --player-check mode (PlayerCheck.cs)
+#endif
 
         // Path detection reads the registry and Steam's library list: off the UI thread.
         if (!GameLocator.IsGameDir(_settings.GamePath))
@@ -132,6 +151,7 @@ public partial class MainWindow : Window
             if (found != null) { _settings.GamePath = found; TrySave(); }
         }
         RefreshStatus();
+        StartUpdateCheck();   // UpdateView.cs: once, off the UI thread (GitHub build; the Nexus build does nothing)
         GuideRefresh();   // the search may have found the game after the guide was drawn
         await CheckGameAsync();
         _watch.Start();
@@ -145,14 +165,17 @@ public partial class MainWindow : Window
         var path = _settings.GamePath;
         bool ok = GameLocator.IsGameDir(path);
         PathBox.Text = ok ? path : "Not set";
-        SetStat(FolderValue, FolderIcon, ok ? "Found" : "Not set", ok ? "Ok" : "Bad");
+        FolderValue.Text = ok ? "Found" : "Not set";
+        OvTone(FolderIco, FolderIcon, ok ? "ThOk" : "ThBad");
         FolderValue.ToolTip = ok ? path : null;
 
         bool loader = ok && GameLocator.HasModLoader(path!);
-        SetStat(LoaderValue, LoaderIcon, !ok ? "—" : loader ? "Ready" : "Missing", !ok ? "Dim" : loader ? "Ok" : "Warn");
+        UpdateLoaderChip(ok, loader);
+        if (_searchBuilt) RebuildSearch();   // a new game folder: its Back blades presets
         UpdateBanner();
         _ = RefreshModsAsync();
         _ = RefreshVotgAsync();   // VotgView.cs: scans once per game folder, off the UI thread
+        _ = RefreshScriptLoaderAsync();   // OverviewView.cs: loader files + GoWR.exe version, off the UI thread
         FillLanguages();
         _ = EnsureItemsAsync(false);   // the loadout item list from this PC's game files (8b), once per language
     }
@@ -167,35 +190,37 @@ public partial class MainWindow : Window
             if (running == _gameRunning) return;
             _gameRunning = running;
             RestartWatch(running);
-            SetStat(GameValue, GameIcon, running ? "Running" : "Idle", running ? "Warn" : "Ok");
-            GameDot.Fill = Brush(running ? "Warn" : "Ok");
-            GameDotText.Text = running ? "Game running" : "Game idle";
+            SetChip(GameDot, GameDotText, running ? "Game running" : "Game idle", running ? "ThWarn" : "ThOk");
             UpdateBanner();
         }
         catch (Exception) { /* a process query can fail during shutdown; try again on the next tick */ }
         finally { _checking = false; }
     }
 
-    /// <summary>One banner, most important problem first.</summary>
+    /// <summary>The most important problem first: text, tone, button, action; null = none. The top banner shows it on every
+    /// page but the Overview, where the hero card says it (OverviewView.cs UpdateHero).</summary>
+    (string Text, string Tone, string? Action, Action? OnAction)? TopProblem()
+    {
+        if (_startError != null) return ("Start-up failed: " + _startError, "Bad", null, null);
+        if (_saveError != null) return ("Could not save settings: " + _saveError, "Bad", null, null);
+        if (!GameLocator.IsGameDir(_settings.GamePath))
+            return ("Game folder not found", "Bad", "Set folder", () => { TabSettings.IsChecked = true; Browse_Click(this, new RoutedEventArgs()); });
+        if (!GameLocator.HasModLoader(_settings.GamePath!)) return ("Mod loader (GoWR MIO) not installed: mods will not load", "Warn", null, null);
+        if (_restartPending.Count > 0)
+            return ($"Restart the game to apply {_restartPending.Count} change{(_restartPending.Count == 1 ? "" : "s")}: "
+                    + string.Join(", ", _restartPending), "Warn", null, null);
+        if (_oldSwitcherOpen) return ("The old Mod Switcher is open: both write the same files. Use one at a time.", "Warn", null, null);
+        if (_gameRunning == true) return ("Game is running: some changes need it closed", "Warn", null, null);
+        return null;
+    }
+
+    /// <summary>One banner, most important problem first; hidden on the Overview, where the hero says it.</summary>
     void UpdateBanner()
     {
-        if (_startError != null)
-            ShowBanner("Start-up failed: " + _startError, "Bad", null, null);
-        else if (_saveError != null)
-            ShowBanner("Could not save settings: " + _saveError, "Bad", null, null);
-        else if (!GameLocator.IsGameDir(_settings.GamePath))
-            ShowBanner("Game folder not found", "Bad", "Set folder", () => { TabSettings.IsChecked = true; Browse_Click(this, new RoutedEventArgs()); });
-        else if (!GameLocator.HasModLoader(_settings.GamePath!))
-            ShowBanner("Mod loader (GoWR MIO) not installed: mods will not load", "Warn", null, null);
-        else if (_restartPending.Count > 0)
-            ShowBanner($"Restart the game to apply {_restartPending.Count} change{(_restartPending.Count == 1 ? "" : "s")}: "
-                       + string.Join(", ", _restartPending), "Warn", null, null);
-        else if (_oldSwitcherOpen)
-            ShowBanner("The old Mod Switcher is open: both write the same files. Use one at a time.", "Warn", null, null);
-        else if (_gameRunning == true)
-            ShowBanner("Game is running: some changes need it closed", "Warn", null, null);
-        else
-            Banner.Visibility = Visibility.Collapsed;
+        var p = TopProblem();
+        if (p is { } q && TabOverview.IsChecked != true) ShowBanner(q.Text, q.Tone, q.Action, q.OnAction);
+        else Banner.Visibility = Visibility.Collapsed;
+        UpdateHero(p);
     }
 
     void ShowBanner(string text, string tone, string? action, Action? onAction)
@@ -211,12 +236,6 @@ public partial class MainWindow : Window
     }
 
     void BannerAction_Click(object sender, RoutedEventArgs e) => _bannerAction?.Invoke();
-
-    void SetStat(TextBlock value, System.Windows.Shapes.Path icon, string text, string tone)
-    {
-        value.Text = text;
-        icon.Stroke = Brush(tone == "Dim" ? "Acc" : tone);
-    }
 
     Brush Brush(string key) => (Brush)FindResource(key);
 
@@ -234,27 +253,40 @@ public partial class MainWindow : Window
         ViewTweaks.Visibility = Show(name == "Game Tweaks");
         ViewSettings.Visibility = Show(name == "Settings");
         SearchBox.Visibility = Show(name is "Boss Fights" or "Companions" or "Valhalla" or "Game Tweaks");
+        if (SearchPanel.IsVisible) SearchClose();
+        UpdateBanner();   // the top banner hides on the Overview (the hero says it there)
     }
 
     static Visibility Show(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
 
-    void Rail_Open(object sender, MouseEventArgs e) => AnimateRail(true);
-    void Rail_Close(object sender, MouseEventArgs e) => AnimateRail(false);
-    void Rail_FocusChanged(object sender, DependencyPropertyChangedEventArgs e)
+    /// <summary>The sidebar key hint ("Ctrl+2"): shown beside the page name when the rail slides open (Theme.xaml ThNav)
+    /// and read by screen readers. No tooltip: the open rail shows the names.</summary>
+    static void NavTip(RadioButton tab, string keys) => System.Windows.Automation.AutomationProperties.SetHelpText(tab, keys);
+
+    /// <summary>The top bar's loader chip: the same check as the Overview "Mod loader" tile.</summary>
+    void UpdateLoaderChip(bool folderOk, bool loader) =>
+        SetChip(LoaderDot, LoaderChipText, !folderOk ? "No game folder" : loader ? "Loader ready" : "Loader missing",
+                !folderOk ? "ThBad" : loader ? "ThOk" : "ThWarn");
+
+    /// <summary>A top-bar chip: dot colour + text (Theme.xaml tokens).</summary>
+    void SetChip(System.Windows.Shapes.Ellipse dot, TextBlock text, string value, string tone)
     {
-        // Keyboard users get the labels too (Tab into the rail opens it).
-        if (Rail.IsKeyboardFocusWithin && InputManager.Current.MostRecentInputDevice is KeyboardDevice) AnimateRail(true);
-        else if (!Rail.IsKeyboardFocusWithin && !Rail.IsMouseOver) AnimateRail(false);
+        dot.Fill = Brush(tone);
+        text.Text = value;
+        text.Foreground = Brush(tone == "ThBad" || tone == "ThWarn" ? tone : "ThMuted");
     }
 
-    void AnimateRail(bool open)
+    RadioButton? TabFor(string tab) => tab switch
     {
-        var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-        var dur = TimeSpan.FromMilliseconds(160);
-        Rail.BeginAnimation(WidthProperty, new DoubleAnimation(open ? RailOpen : RailClosed, dur) { EasingFunction = ease });
-        RailShadow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty,
-                                  new DoubleAnimation(open ? 0.55 : 0, dur));
-    }
+        "overview" => TabOverview, "boss" => TabBoss, "companions" => TabCompanions, "valhalla" => TabValhalla,
+        "tweaks" => TabTweaks, "settings" => TabSettings, _ => null,
+    };
+
+    Panel? ViewFor(string tab) => tab switch
+    {
+        "overview" => ViewOverview, "boss" => ViewBoss, "companions" => ViewCompanions, "valhalla" => ViewValhalla,
+        "tweaks" => ViewTweaks, "settings" => ViewSettings, _ => null,
+    };
 
     // ---------- settings ----------
 

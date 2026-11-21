@@ -22,12 +22,17 @@ public static class Tweaks
 
     public static (bool On, int Deg) FovGet(string gameRoot)
     {
+        // every fov line is read: the last active one wins (as FovActiveGet), else the first commented value is shown as off
+        int? off = null;
+        (bool, int)? on = null;
         foreach (var l in File.ReadAllLines(Path.Combine(gameRoot, MioIni)))
         {
             var m = Regex.Match(l, @"^\s*(;?)\s*fov_angle\s*=\s*(\d+)", RegexOptions.IgnoreCase); // PS -match ignores case
-            if (m.Success) { int d = int.Parse(m.Groups[2].Value); return (m.Groups[1].Value == "" && d > 0, d); }
+            if (!m.Success || !int.TryParse(m.Groups[2].Value, out int d)) continue;
+            if (m.Groups[1].Value == "" && d > 0) on = (true, d);
+            else off ??= d;
         }
-        return (false, 90);
+        return on ?? (false, off ?? 90);
     }
 
     /// <summary>Returns true when the file changed (full game restart needed).</summary>
