@@ -30,7 +30,6 @@ jobs:
           name: SBGModSwitcher-win-x64
           path: |
             out/SBGModSwitcher.exe
-            out/clrgc.dll
           if-no-files-found: error
 
       # The Nexus build: same source, SbgNexus=true leaves out all network code (no update check). Fresh obj/bin first,
@@ -49,5 +48,4 @@ jobs:
           name: SBGModSwitcher-nexus-win-x64
           path: |
             out-nexus/SBGModSwitcher.exe
-            out-nexus/clrgc.dll
           if-no-files-found: error

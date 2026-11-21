@@ -196,7 +196,7 @@ public static class UpdateHelper
     }
 
     /// <summary>
-    /// Start the helper: a copy of this exe (and clrgc.dll beside it) in <paramref name="staging"/>\helper, run with
+    /// Start the helper: a copy of this exe in <paramref name="staging"/>\helper, run with
     /// --update-apply. It waits until this process has exited, installs <paramref name="newDir"/> and starts the app again.
     /// </summary>
     public static void StartHelper(string staging, string newDir)
@@ -207,8 +207,6 @@ public static class UpdateHelper
         Directory.CreateDirectory(helperDir);
         var helper = Path.Combine(helperDir, Path.GetFileName(exe));
         File.Copy(exe, helper, true);
-        var gc = Path.Combine(appDir, "clrgc.dll");
-        if (File.Exists(gc)) File.Copy(gc, Path.Combine(helperDir, "clrgc.dll"), true);
         var psi = new ProcessStartInfo(helper) { UseShellExecute = false, WorkingDirectory = helperDir };
         foreach (var a in new[] { "--update-apply", "--from", newDir, "--to", appDir, "--pid", Environment.ProcessId.ToString(),
                                   "--restart", Path.GetFileName(exe), "--gui" })
@@ -219,6 +217,13 @@ public static class UpdateHelper
     /// <summary>Old temp folders of earlier updates (the helper cannot delete the folder it runs from). Best effort.</summary>
     public static void CleanTemp()
     {
+        // 2.0.5 and older shipped clrgc.dll beside the exe; this version does not use it (an update leaves it behind)
+        try
+        {
+            var me = Environment.ProcessPath;
+            if (me != null) TryDelete(Path.Combine(Path.GetDirectoryName(me)!, "clrgc.dll"));
+        }
+        catch (Exception) { }
         try
         {
             if (!Directory.Exists(TempRoot)) return;
