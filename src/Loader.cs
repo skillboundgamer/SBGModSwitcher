@@ -277,7 +277,8 @@ public static partial class Loader
             {
                 // nothing changed in the game: the old record (an update) or none (a fresh file); no orphan backup
                 SaveRecords(before);
-                if (backup != null && !appWrote) try { File.Delete(Path.Combine(Dir, backup)); } catch (IOException) { }
+                // only a backup made in this pass: a carried-over one (an update, a retired stub) is the only copy of that file (review 2026-11-21)
+                if (backup != null && have != null && !appWrote) try { File.Delete(Path.Combine(Dir, backup)); } catch (IOException) { }
                 throw;
             }
             finally { if (File.Exists(tmp)) File.Delete(tmp); }
