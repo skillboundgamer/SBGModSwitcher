@@ -47,6 +47,7 @@ end
 local PLUGINS = {
   {file = "sbg_twogna.lua", phase = 1},
   {file = "sbg_backblades.lua", phase = 0.5},   -- v3: Back Blades pack (cosmetic, stowed Blades of Chaos)
+  {file = "sbg_axehide.lua", phase = 1.5},      -- v4: Hide the Leviathan Axe pack (cosmetic)
 }
 
 -- the loadout block's code for one file of PLUGINS; state in SBG.PX[file] (clock, mod, ver, err, tickErr)
