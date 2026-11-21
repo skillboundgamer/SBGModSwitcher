@@ -234,6 +234,21 @@
 
             <!-- one-line banners: "mods need the script loader" (warn) and the VOTG note -->
             <StackPanel x:Name="OvBanners" Margin="0,14,0,0">
+              <!-- clean-state check (OverviewView.cs CleanView): old or foreign files found; hidden when clean -->
+              <Border x:Name="CleanBanner" Style="{StaticResource ThBanner}" Background="{StaticResource ThWarnBg}" BorderBrush="{StaticResource ThWarnLine}" Visibility="Collapsed">
+                <DockPanel>
+                  <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Data="{StaticResource IcWarn}" Stroke="{StaticResource ThWarn}" Margin="0,-3,10,-3">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></Path.LayoutTransform>
+                  </Path>
+                  <Button x:Name="CleanRepair" DockPanel.Dock="Right" Style="{StaticResource ThBtnSm}" Content="Repair" Click="CleanRepair_Click"
+                          ToolTip="Puts our old files right. Files of other tools are only changed after you say Yes."/>
+                  <Button x:Name="CleanCheck" DockPanel.Dock="Right" Style="{StaticResource ThBtnSm}" Content="Check again" Margin="0,0,8,0" Click="CleanCheck_Click"/>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="CleanText" Foreground="{StaticResource ThText}" FontSize="13.5" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="CleanLog" Foreground="{StaticResource ThText}" FontSize="12.5" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
               <Border x:Name="NeedBanner" Style="{StaticResource ThBanner}" Background="{StaticResource ThWarnBg}" BorderBrush="{StaticResource ThWarnLine}" Visibility="Collapsed">
                 <DockPanel>
                   <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Data="{StaticResource IcWarn}" Stroke="{StaticResource ThWarn}" Margin="0,-3,10,-3">

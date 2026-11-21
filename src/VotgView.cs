@@ -45,16 +45,28 @@ public partial class MainWindow
     }
 
     /// <summary>Texts only: the status card and the note banner (short first sentence; the whole text in the tooltip).</summary>
+    VotgResult? _votgRes; string? _votgTxt; bool _votgOffOk;   // last ShowVotg input (the clean check redraws the row)
+
     void ShowVotg(VotgResult? r, string? text, bool canTurnOff)
     {
+        _votgRes = r; _votgTxt = text; _votgOffOk = canTurnOff;
         _votgLine = text;
+        // VOTG backup folder left without its receipt: one short line (from the clean-state report, no second scan)
+        bool leftovers = text == null && _clean?.Votg.Leftovers == true;
+        if (leftovers)
+        {
+            var left = "VOTG backup files are still in the mod folder, but VOTG is not installed. They were not changed.";
+            VotgBanner.Visibility = Visibility.Visible;
+            VotgText.Text = left; VotgText.ToolTip = left;
+            VotgOff.Visibility = Visibility.Collapsed;
+        }
         bool found = r?.Found == true;
         VotgValue.Text = r == null ? "—" : !found ? "Not installed"
             : (r.Info?.ModVersion is { Length: > 0 } v ? "Mod v" + v : "Found") + (r.Clash.Count > 0 ? " · clash" : " · beside ours");
         VotgStatCard.ToolTip = text ?? "VOTG mod loader: not found in this game folder";
         OvTone(VotgIco, VotgIcon, !found ? "ThAccent" : r!.Clash.Count > 0 || r.Info is { Tested: false } ? "ThWarn" : "ThOk");
-        VotgBanner.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
-        if (text == null) return;
+        if (text == null) { if (!leftovers) VotgBanner.Visibility = Visibility.Collapsed; return; }
+        VotgBanner.Visibility = Visibility.Visible;
         VotgText.Text = text;      // wraps: the whole text shows (2.0.5 test: a cut "…" hid the button name it asks for)
         VotgText.ToolTip = text;
         VotgOff.Visibility = canTurnOff ? Visibility.Visible : Visibility.Collapsed;
