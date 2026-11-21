@@ -153,7 +153,7 @@ public sealed class ModMatcher
     }
 
     internal string UnpackedSha(FileInfo f) =>
-        Cached(f, () => new UnpackedHash(Recipe.Sha(Recipe.Unpack(File.ReadAllBytes(f.FullName))))).Value;
+        Cached(f, () => new UnpackedHash(Recipe.UnpackedShaOf(f.FullName))).Value;
 
     /// <summary>
     /// "Vanilla" for a game file: equal to the player's own backup; never backed up = never touched = vanilla.
@@ -203,7 +203,7 @@ public sealed class ModMatcher
         return Convert.ToHexString(SHA256.HashData(s));
     });
 
-    internal int[] VoiceCount(string wad) => Cached(new FileInfo(wad), () => GowrTools.KingVoiceCount(GowrTools.Lz4Read(wad)));
+    internal int[] VoiceCount(string wad) => Cached(new FileInfo(wad), () => { using var r = new Lz4FrameReader(wad); return GowrTools.KingVoiceCountStream(r.Read); });
 
     internal uint SlotNow(string wadName) => WadSize(Path.Combine(_game, @"exec\dc\pc_le\gbl_wadsizetable.dcb"), wadName);
 
