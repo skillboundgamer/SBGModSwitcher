@@ -267,6 +267,40 @@ public static class GowrTools
     public static int[] KingVoiceCount(byte[] w) { return new int[] { KingVoiceScan(w, 0), KingVoiceScan(w, 1) }; }
     public static int KingVoiceSet(byte[] w, bool on) { return KingVoiceScan(w, on ? 2 : 3); }
 
+    /// <summary>
+    /// Same counts as KingVoiceCount, from a read callback (read(buf, off, count) = bytes read, 0 = end) in one pass with a
+    /// small sliding window: no whole-wad array (a 90 MB wad kept ~500 MB after a status check with the default GC).
+    /// Every record needs the 0x20 bytes before it and 0x28 after it, so each window keeps that overlap.
+    /// </summary>
+    public static int[] KingVoiceCountStream(Func<byte[], int, int, int> read)
+    {
+        const int Chunk = 1 << 20, Back = 0x20, Fwd = 0x28;
+        var buf = new byte[Chunk + Back + Fwd + 16];
+        int have = 0;            // valid bytes in buf
+        long bo = 0;             // file offset of buf[0] (always a multiple of 8)
+        long next = 0x20;        // next record candidate (file offset, multiple of 8)
+        int king = 0, src = 0; bool eof = false;
+        while (true)
+        {
+            while (!eof && have < buf.Length) { int k = read(buf, have, buf.Length - have); if (k <= 0) eof = true; else have += k; }
+            long end = bo + have;
+            for (; next + Fwd <= end; next += 8)
+            {
+                int i = (int)(next - bo);
+                if (BitConverter.ToUInt64(buf, i) != LineMarker) continue;
+                ulong spk = BitConverter.ToUInt64(buf, i + 0x20);
+                if (spk == KingSpeaker) king++;
+                else if (spk == SourceSpeaker) src++;
+            }
+            if (eof) break;
+            // slide: keep the 0x20 bytes before the next candidate
+            long keepFrom = next - Back;
+            int drop = (int)(keepFrom - bo);
+            if (drop > 0) { Buffer.BlockCopy(buf, drop, buf, 0, have - drop); have -= drop; bo += drop; }
+        }
+        return new int[] { king, src };
+    }
+
     // ---------- visual script: rewrite a StringHash node's name in place ----------
     const ulong StringHashType = 0x99918f2b0491b355UL;
     public static void SetStringHash(byte[] vs, int nodeOff, string name)
