@@ -371,6 +371,10 @@ public partial class MainWindow
         bool folderOk = GameLocator.IsGameDir(_settings.GamePath);
         UpdateLoaderChip(folderOk, folderOk && GameLocator.HasModLoader(_settings.GamePath!));
         await RefreshScriptLoaderAsync();   // the Overview cards read the sandbox (perf mode skips RefreshStatus)
+        // the UI part of "Check again" / Repair (the check itself runs off the UI thread): the clean-state row shows a report
+        var fakeClean = new CleanReport("x", new() { new("a", "b", "restore") }, new() { new("c", "d", "restore") }, new(false, false, "none", 0), new() { "A hint." });
+        _perf.Add($"  {"clean-state row show / update",-34} {await PerfCase("overview: clean-state row", 12, i => () => ShowClean(fakeClean, i % 2 == 0 ? "restored\ta" : null)),6:0.0} ms");
+        ShowClean(new CleanReport("x", new(), new(), new(false, false, "none", 0), new()), null);
         await PerfShot("shell_overview");
         // the sidebar slide (revamp batch B): open over the page, picture, close; the page's size must not change
         double pageW = MainArea.ActualWidth;

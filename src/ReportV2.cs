@@ -57,6 +57,8 @@ public static class ReportV2
             foreach (var l in owners!.Lines()) sb.AppendLine("  " + l);
             Section(sb, "Game files this app has a backup of");
             foreach (var l in owners.ChangedGameFiles(i.DataRoot)) sb.AppendLine(l);
+            Section(sb, "Clean-state check (old or foreign files)");
+            foreach (var l in CleanLines(game!, i.DataRoot)) sb.AppendLine("  " + l);
         }
 
         Section(sb, "Mods");
@@ -78,6 +80,24 @@ public static class ReportV2
     }
 
     static void Section(StringBuilder sb, string title) { sb.AppendLine(); sb.AppendLine("== " + title + " =="); }
+
+    /// <summary>The clean-state check (2.0.6) as report lines: winmm kind, VOTG receipt / leftovers, each stale and foreign file, hints.</summary>
+    internal static List<string> CleanLines(string game, string? data)
+    {
+        var o = new List<string>();
+        try
+        {
+            var r = CleanState.Check(game, data);
+            o.Add($"winmm.dll: {r.Votg.Winmm}, {r.Votg.WinmmSize:N0} bytes; VOTG receipt: {(r.Votg.Receipt ? "yes" : "no")}; VOTG leftovers: {(r.Votg.Leftovers ? "yes" : "no")}");
+            if (r.IsClean) o.Add("(no old or foreign files)");
+            foreach (var s in r.Stale) o.Add($"stale\t{s.Path}\t{s.Fix}\t{s.Why}");
+            foreach (var f in r.Foreign) o.Add($"foreign\t{f.Path}\t{f.Fix}\t{f.Why}");
+            foreach (var h in r.Hints) o.Add("hint: " + h);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        { o.Add("(check failed: " + ex.Message + ")"); }
+        return o;
+    }
 
     /// <summary>The "What failed" and "Last Apply" sections, from the Activity log lines.</summary>
     static void FailedAndApply(StringBuilder sb, List<string> act)

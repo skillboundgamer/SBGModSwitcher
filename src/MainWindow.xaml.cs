@@ -154,6 +154,7 @@ public partial class MainWindow : Window
         StartUpdateCheck();   // UpdateView.cs: once, off the UI thread (GitHub build; the Nexus build does nothing)
         GuideRefresh();   // the search may have found the game after the guide was drawn
         await CheckGameAsync();
+        _ = CleanFirstRunAsync();   // OverviewView.cs: the clean-state check, once per new app version
         _watch.Start();
         await FirstOpenSpeedAsync();   // SpeedFirstOpen.cs: a custom walk speed in the MIO ini goes back to default, once
     }

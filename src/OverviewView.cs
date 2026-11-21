@@ -235,6 +235,99 @@ public partial class MainWindow
         return true;
     }
 
+    // ---------- clean-state row (2.0.6): old / foreign files; checks and repairs run off the UI thread ----------
+
+    internal CleanReport? _clean;   // the last report (the VOTG row reads it; no second scan)
+    bool _cleanBusy;
+
+    /// <summary>Once per new app version: check, then remember the version. No check at any other start (speed).</summary>
+    async Task CleanFirstRunAsync()
+    {
+        var ver = AppVersionText();
+        if (_settings.LastSeenVersion == ver || !GameLocator.IsGameDir(_settings.GamePath)) return;
+        if (!await RunCleanCheckAsync(false)) return;   // failed or busy: ask again at the next start
+        _settings.LastSeenVersion = ver;
+        TrySave();
+    }
+
+    async void CleanCheck_Click(object sender, RoutedEventArgs e) => await RunCleanCheckAsync(true);
+
+    /// <summary>true = the check ran and its report is shown.</summary>
+    async Task<bool> RunCleanCheckAsync(bool byPlayer, string? after = null)
+    {
+        var game = _settings.GamePath;
+        if (_cleanBusy || !GameLocator.IsGameDir(game)) return false;
+        _cleanBusy = true;
+        CleanCheck.IsEnabled = CleanRepair.IsEnabled = false;
+        try
+        {
+            string? data = _dataRoot;
+            var rep = await Task.Run(() => CleanState.Check(game!, data));
+            _clean = rep;
+            ShowClean(rep, after);
+            ShowVotg(_votgRes, _votgTxt, _votgOffOk);   // the leftovers line of the VOTG row
+            if (byPlayer && rep.IsClean) ShowToast("Nothing to repair. All files are right.", "Ok");
+            return true;
+        }
+        catch (Exception ex) { Log("Clean check failed: " + ex.Message, "Warn"); return false; }
+        finally { _cleanBusy = false; CleanCheck.IsEnabled = CleanRepair.IsEnabled = true; }
+    }
+
+    /// <summary>Texts only: one row, hidden when clean. after = the repair log lines.</summary>
+    void ShowClean(CleanReport rep, string? after)
+    {
+        bool show = !rep.IsClean;
+        CleanBanner.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        CleanLog.Visibility = show && after != null ? Visibility.Visible : Visibility.Collapsed;
+        CleanLog.Text = after ?? "";
+        if (!show) return;
+        var parts = new List<string>();
+        if (rep.Stale.Count > 0) parts.Add($"{rep.Stale.Count} old file{(rep.Stale.Count == 1 ? "" : "s")} of this app");
+        int other = rep.Foreign.Count(i => i.Fix != "none");
+        if (other > 0) parts.Add($"{other} file{(other == 1 ? "" : "s")} from another tool");
+        var text = "Found " + string.Join(" and ", parts) + " in the game folder." + (rep.Hints.Count > 0 ? " " + rep.Hints[0] : "");
+        CleanText.Text = text;
+        CleanText.ToolTip = string.Join("\n", rep.Stale.Concat(rep.Foreign).Select(i => i.Path + ": " + i.Why).Concat(rep.Hints));
+    }
+
+    async void CleanRepair_Click(object sender, RoutedEventArgs e)
+    {
+        var game = _settings.GamePath;
+        var rep = _clean;
+        if (_cleanBusy || rep == null || !GameLocator.IsGameDir(game)) return;
+        // files of other tools: one question first; No = only our own files
+        var ask = rep.Foreign.Where(i => i.Fix == "restore").ToList();
+        bool yes = false;
+        if (ask.Count > 0)
+        {
+            var list = string.Join("\n", ask.Take(8).Select(i => "  " + i.Path)) + (ask.Count > 8 ? $"\n  and {ask.Count - 8} more" : "");
+            yes = MessageBox.Show(this, "These files were changed by VOTG or another tool. Put the originals back?\n\n" + list,
+                "Repair", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        }
+        _cleanBusy = true;
+        CleanCheck.IsEnabled = CleanRepair.IsEnabled = false;
+        string? data = _dataRoot;
+        var askedPaths = ask.Select(i => i.Path).ToHashSet();   // the Yes covers only the files the player saw
+        List<string> lines;
+        try
+        {
+            await _io.WaitAsync();   // Repair writes: never while a preset is being written
+            try { lines = await Task.Run(() => CleanState.Repair(game!, data, yes, yes, null, askedPaths)); }
+            finally { _io.Release(); }
+        }
+        catch (Exception ex) { Log("Repair failed: " + ex.Message, "Bad"); _cleanBusy = false; CleanCheck.IsEnabled = CleanRepair.IsEnabled = true; return; }
+        _cleanBusy = false;
+        CleanCheck.IsEnabled = CleanRepair.IsEnabled = true;
+        foreach (var l in lines) Log("  " + l.Replace('\t', ' '));
+        bool refused = lines.Count == 1 && lines[0] == CleanState.RefusedLine;
+        if (refused) { Log("Repair: close the game first. Nothing was changed.", "Warn"); }
+        var summary = refused ? "Close the game first. Nothing was changed."
+            : string.Join("\n", lines.Take(6).Select(l => l.Replace('\t', ' '))) + (lines.Count > 6 ? $"\nand {lines.Count - 6} more (see the activity log)" : "");
+        _ = RefreshScriptLoaderAsync(); _ = RefreshModsAsync();
+        await RunCleanCheckAsync(false, summary.Length == 0 ? null : summary);
+        if (_clean is { IsClean: true }) ShowToast(refused ? "Close the game first." : "Repair done. All files are right.", refused ? "Warn" : "Ok");
+    }
+
     string? _votgAsk;   // the untested-VOTG question of the last Apply (null = none)
 
     async Task<bool> InstallLoaderAsync(string game, string data)

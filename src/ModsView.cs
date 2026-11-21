@@ -422,5 +422,6 @@ public partial class MainWindow
         _ = RefreshModsAsync();
         _ = RefreshScriptLoaderAsync();
         _votgScanned = null; _ = RefreshVotgAsync();
+        _ = RunCleanCheckAsync(false);   // OverviewView.cs: the clean-state row shows again if old or foreign files are there
     }
 }
