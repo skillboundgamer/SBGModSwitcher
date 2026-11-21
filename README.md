@@ -18,7 +18,7 @@ Needs Windows and the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/
 dotnet publish src/ModSwitcher2.csproj -c Release -r win-x64 --self-contained true -o out -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:DebugType=None -p:DebugSymbols=false -p:ContinuousIntegrationBuild=true -p:Deterministic=true
 ```
 
-The result is `out/SBGModSwitcher.exe` plus `out/clrgc.dll`. These are the same two files that are in the release zip.
+The result is one file, `out/SBGModSwitcher.exe`. It is the same file that is in the release zip.
 
 ## Layout
 

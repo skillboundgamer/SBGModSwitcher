@@ -46,6 +46,21 @@ public sealed class Recipe
     public static byte[] Unpack(byte[] data) =>
         data.Length >= 4 && data.AsSpan(0, 4).SequenceEqual(Lz4Magic) ? GowrTools.Lz4Decompress(data) : data;
 
+    /// <summary>
+    /// sha256 of a file's unpacked bytes, read as a stream: only small buffers live, never the whole wad
+    /// (a 90 MB shore wad made the default GC keep ~850 MB after a status check). Same value as Sha(Unpack(bytes)).
+    /// Speed: runs inside the mod check (off the UI thread), one pass, no big array.
+    /// </summary>
+    public static string UnpackedShaOf(string path)
+    {
+        using var r = new Lz4FrameReader(path);
+        using var h = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buf = new byte[1 << 16];
+        int n;
+        while ((n = r.Read(buf, 0, buf.Length)) > 0) h.AppendData(buf, 0, n);
+        return Convert.ToHexString(h.GetHashAndReset()).ToLowerInvariant();
+    }
+
     public static string Sha(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     /// <summary>
