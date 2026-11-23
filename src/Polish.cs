@@ -80,7 +80,7 @@ public partial class MainWindow
         sb.AppendLine($"Version: {v}  |  Windows: {RuntimeInformation.OSDescription}  |  .NET: {RuntimeInformation.FrameworkDescription}");
         var game = _settings.GamePath;
         sb.AppendLine($"Game folder: {(GameLocator.IsGameDir(game) ? game : "NOT FOUND")}");
-        sb.AppendLine($"Mod loader: {(GameLocator.IsGameDir(game) && GameLocator.HasModLoader(game!) ? "found" : "missing")}  |  Game running: {(_gameRunning == true ? "yes" : "no")}");
+        sb.AppendLine($"Mod loader: {(!GameLocator.IsGameDir(game) ? "missing" : GameLocator.HasModLoader(game!) ? "found" : GameLocator.HasVotgLoader(game!) ? "found (VOTG's)" : "missing")}  |  Game running: {(_gameRunning == true ? "yes" : "no")}");
         // the Overview's answers (read off the UI thread already): no file work on this click
         sb.AppendLine($"Game exe: {_ldr?.ExeVersion ?? "-"}  |  Script loader: "
                       + (_ldr == null ? "-" : _ldr.Present ? (_ldr.Mine ? "in (ours)" : "in (not ours)") : "off")

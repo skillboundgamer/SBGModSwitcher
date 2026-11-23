@@ -27,7 +27,7 @@ public partial class MainWindow
     bool _guideAgree;
 
     bool GuideFolderOk => GameLocator.IsGameDir(_settings.GamePath);
-    bool GuideMioOk => GuideFolderOk && GameLocator.HasModLoader(_settings.GamePath!);
+    bool GuideMioOk => GuideFolderOk && GameLocator.HasAnyLoader(_settings.GamePath!);   // MIO, or VOTG's own loader
     bool GuideStepOk(int i) => i switch
     {
         0 => GuideFolderOk,
@@ -245,10 +245,14 @@ public partial class MainWindow
 
     FrameworkElement GuideMio()
     {
-        var sp = GuideHead("IcPlug", "Install the mod loader", "GoWR MIO loads the mods into the game. It is a separate download on Nexus.");
+        bool votgOnly = GuideMioOk && !GameLocator.HasModLoader(_settings.GamePath!);   // VOTG's loader, no MIO: nothing to install
+        var sp = votgOnly
+            ? GuideHead("IcPlug", "The mod loader", "Your game already has VOTG's loader. It loads the mods, so you do not need GoWR MIO.")
+            : GuideHead("IcPlug", "Install the mod loader", "GoWR MIO loads the mods into the game. It is a separate download on Nexus.");
         if (!GuideFolderOk) { sp.Children.Add(GuideStatus(false, "", "Set the game folder first (step 1)", "Warn")); return sp; }
         bool ok = GuideMioOk;
-        sp.Children.Add(GuideStatus(ok, "GoWR MIO is installed", "GoWR MIO is not in your game folder"));
+        sp.Children.Add(GuideStatus(ok, votgOnly ? "VOTG's loader is installed. You do not need GoWR MIO." : "GoWR MIO is installed",
+                                    "GoWR MIO is not in your game folder"));
         if (!ok)
             sp.Children.Add(GuideButtons(("Get GoWR MIO", true, () =>
             {

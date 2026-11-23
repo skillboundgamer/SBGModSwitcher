@@ -369,7 +369,7 @@ public partial class MainWindow
         // The chips get their real checks first (perf mode skips RefreshStatus): the process list and the sandbox's loader files.
         await CheckGameAsync();
         bool folderOk = GameLocator.IsGameDir(_settings.GamePath);
-        UpdateLoaderChip(folderOk, folderOk && GameLocator.HasModLoader(_settings.GamePath!));
+        UpdateLoaderChip(folderOk, folderOk && GameLocator.HasAnyLoader(_settings.GamePath!));
         await RefreshScriptLoaderAsync();   // the Overview cards read the sandbox (perf mode skips RefreshStatus)
         // the UI part of "Check again" / Repair (the check itself runs off the UI thread): the clean-state row shows a report
         var fakeClean = new CleanReport("x", new() { new("a", "b", "restore") }, new() { new("c", "d", "restore") }, new(false, false, "none", 0), new() { "A hint." });
