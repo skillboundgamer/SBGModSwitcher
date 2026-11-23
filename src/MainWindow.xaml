@@ -80,7 +80,7 @@
                 <TextBlock x:Name="GameDotText" Text="Checking" Foreground="{StaticResource ThMuted}" FontSize="12.5" Margin="7,0,0,1" VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
-            <Border x:Name="LoaderChip" Style="{StaticResource ThChip}" ToolTip="Mod loader (GoWR MIO): winmm.dll + mod\GOWR_MIO.ini">
+            <Border x:Name="LoaderChip" Style="{StaticResource ThChip}" ToolTip="Mod loader: GoWR MIO (winmm.dll + mod\GOWR_MIO.ini) or VOTG's own loader">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Ellipse x:Name="LoaderDot" Width="7" Height="7" Fill="{StaticResource ThMuted}" VerticalAlignment="Center"/>
                 <TextBlock x:Name="LoaderChipText" Text="Loader" Foreground="{StaticResource ThMuted}" FontSize="12.5" Margin="7,0,0,1" VerticalAlignment="Center"/>

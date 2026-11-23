@@ -79,6 +79,25 @@ public static class GameLocator
     public static bool HasModLoader(string dir) =>
         File.Exists(Path.Combine(dir, "winmm.dll")) && File.Exists(Path.Combine(dir, "mod", "GOWR_MIO.ini"));
 
+    /// <summary>VOTG's own loader: its receipt (mod\_votg_receipt.json) and its winmm.dll. It has no GOWR_MIO.ini, and MIO must not be
+    /// unpacked over it (it would replace VOTG's winmm.dll).</summary>
+    public static bool HasVotgLoader(string dir)
+    {
+        if (!Loader.VotgActive(dir)) return false;
+        try
+        {
+            // GoWR MIO's own winmm.dll (480,768 bytes, hashed 2026-11-21) over VOTG's loader is a broken mix, not VOTG's loader
+            var f = new FileInfo(Path.Combine(dir, "winmm.dll"));
+            return f.Exists && f.Length != MioWinmmBytes;
+        }
+        catch (Exception) { return false; }
+    }
+
+    const long MioWinmmBytes = 480768;
+
+    /// <summary>Any working mod loader: MIO, or VOTG's. The guide, the banner and the chip ask this, not <see cref="HasModLoader"/> alone.</summary>
+    public static bool HasAnyLoader(string dir) => HasModLoader(dir) || HasVotgLoader(dir);
+
     public static string? Detect()
     {
         try

@@ -170,7 +170,7 @@ public partial class MainWindow : Window
         OvTone(FolderIco, FolderIcon, ok ? "ThOk" : "ThBad");
         FolderValue.ToolTip = ok ? path : null;
 
-        bool loader = ok && GameLocator.HasModLoader(path!);
+        bool loader = ok && GameLocator.HasAnyLoader(path!);
         UpdateLoaderChip(ok, loader);
         if (_searchBuilt) RebuildSearch();   // a new game folder: its Back blades presets
         UpdateBanner();
@@ -206,7 +206,7 @@ public partial class MainWindow : Window
         if (_saveError != null) return ("Could not save settings: " + _saveError, "Bad", null, null);
         if (!GameLocator.IsGameDir(_settings.GamePath))
             return ("Game folder not found", "Bad", "Set folder", () => { TabSettings.IsChecked = true; Browse_Click(this, new RoutedEventArgs()); });
-        if (!GameLocator.HasModLoader(_settings.GamePath!)) return ("Mod loader (GoWR MIO) not installed: mods will not load", "Warn", null, null);
+        if (!GameLocator.HasAnyLoader(_settings.GamePath!)) return ("Mod loader (GoWR MIO) not installed: mods will not load", "Warn", null, null);
         if (_restartPending.Count > 0)
             return ($"Restart the game to apply {_restartPending.Count} change{(_restartPending.Count == 1 ? "" : "s")}: "
                     + string.Join(", ", _restartPending), "Warn", null, null);
